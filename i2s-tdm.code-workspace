@@ -7,6 +7,6 @@
     "files.exclude": {
       "fpga": true
     },
-    "window.title": "i2s-tdm - ${folderName} - ${appName}"
+    "window.title": "${rootName} - ${activeEditorMedium} - ${appName}"
   }   
 }
