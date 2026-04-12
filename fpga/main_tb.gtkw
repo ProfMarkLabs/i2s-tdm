@@ -1,0 +1,159 @@
+[*]
+[*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
+[*] Sun Apr 12 18:59:29 2026
+[*]
+[dumpfile] "C:\Users\c33107\OneDrive - University of Ottawa\Projects\Capstone-BF-CNN\apio-test\_build\tdm8\main_tb.vcd"
+[dumpfile_mtime] "Sun Apr 12 18:59:03 2026"
+[dumpfile_size] 72978636
+[savefile] "C:\Users\c33107\OneDrive - University of Ottawa\Projects\Capstone-BF-CNN\apio-test\main_tb.gtkw"
+[timestart] 1487000000
+[size] 1920 1082
+[pos] -1 -1
+*-27.910498 1056480000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] testbench.
+[treeopen] testbench.dut.
+[treeopen] testbench.mic[1].
+[treeopen] testbench.sigmon[1].
+[sst_width] 247
+[signals_width] 264
+[sst_expanded] 1
+[sst_vpaned_height] 342
+@420
+testbench.mtype
+@28
+testbench.mic[1].L.eof
+testbench.mic[1].L.SD
+@100000028
+testbench.mic[1].L.mstate[1:0]
+@22
+testbench.mic[1].L.mfcnt[15:0]
+@24
+testbench.mic[1].R.mtype
+@28
+testbench.mic[1].R.eof
+testbench.mic[1].R.SD
+@100000028
+testbench.mic[1].R.mstate[1:0]
+@22
+testbench.mic[1].R.mfcnt[15:0]
+@200
+-
+@22
+testbench.sigmon[1].msdo[63:0]
+testbench.sigmon[2].msdo[63:0]
+testbench.sigmon[3].msdo[63:0]
+testbench.sigmon[4].msdo[63:0]
+@200
+-
+@22
+testbench.sigmon[1].sdi[63:0]
+testbench.sigmon[2].sdi[63:0]
+@c00023
+testbench.sigmon[3].sdi[63:0]
+@28
+(0)testbench.sigmon[3].sdi[63:0]
+(1)testbench.sigmon[3].sdi[63:0]
+(2)testbench.sigmon[3].sdi[63:0]
+(3)testbench.sigmon[3].sdi[63:0]
+(4)testbench.sigmon[3].sdi[63:0]
+(5)testbench.sigmon[3].sdi[63:0]
+(6)testbench.sigmon[3].sdi[63:0]
+(7)testbench.sigmon[3].sdi[63:0]
+(8)testbench.sigmon[3].sdi[63:0]
+(9)testbench.sigmon[3].sdi[63:0]
+(10)testbench.sigmon[3].sdi[63:0]
+(11)testbench.sigmon[3].sdi[63:0]
+(12)testbench.sigmon[3].sdi[63:0]
+(13)testbench.sigmon[3].sdi[63:0]
+(14)testbench.sigmon[3].sdi[63:0]
+(15)testbench.sigmon[3].sdi[63:0]
+(16)testbench.sigmon[3].sdi[63:0]
+(17)testbench.sigmon[3].sdi[63:0]
+(18)testbench.sigmon[3].sdi[63:0]
+(19)testbench.sigmon[3].sdi[63:0]
+(20)testbench.sigmon[3].sdi[63:0]
+(21)testbench.sigmon[3].sdi[63:0]
+(22)testbench.sigmon[3].sdi[63:0]
+(23)testbench.sigmon[3].sdi[63:0]
+(24)testbench.sigmon[3].sdi[63:0]
+(25)testbench.sigmon[3].sdi[63:0]
+(26)testbench.sigmon[3].sdi[63:0]
+(27)testbench.sigmon[3].sdi[63:0]
+(28)testbench.sigmon[3].sdi[63:0]
+(29)testbench.sigmon[3].sdi[63:0]
+(30)testbench.sigmon[3].sdi[63:0]
+(31)testbench.sigmon[3].sdi[63:0]
+(32)testbench.sigmon[3].sdi[63:0]
+(33)testbench.sigmon[3].sdi[63:0]
+(34)testbench.sigmon[3].sdi[63:0]
+(35)testbench.sigmon[3].sdi[63:0]
+(36)testbench.sigmon[3].sdi[63:0]
+(37)testbench.sigmon[3].sdi[63:0]
+(38)testbench.sigmon[3].sdi[63:0]
+(39)testbench.sigmon[3].sdi[63:0]
+(40)testbench.sigmon[3].sdi[63:0]
+(41)testbench.sigmon[3].sdi[63:0]
+(42)testbench.sigmon[3].sdi[63:0]
+(43)testbench.sigmon[3].sdi[63:0]
+(44)testbench.sigmon[3].sdi[63:0]
+(45)testbench.sigmon[3].sdi[63:0]
+(46)testbench.sigmon[3].sdi[63:0]
+(47)testbench.sigmon[3].sdi[63:0]
+(48)testbench.sigmon[3].sdi[63:0]
+(49)testbench.sigmon[3].sdi[63:0]
+(50)testbench.sigmon[3].sdi[63:0]
+(51)testbench.sigmon[3].sdi[63:0]
+(52)testbench.sigmon[3].sdi[63:0]
+(53)testbench.sigmon[3].sdi[63:0]
+(54)testbench.sigmon[3].sdi[63:0]
+(55)testbench.sigmon[3].sdi[63:0]
+(56)testbench.sigmon[3].sdi[63:0]
+(57)testbench.sigmon[3].sdi[63:0]
+(58)testbench.sigmon[3].sdi[63:0]
+(59)testbench.sigmon[3].sdi[63:0]
+(60)testbench.sigmon[3].sdi[63:0]
+(61)testbench.sigmon[3].sdi[63:0]
+(62)testbench.sigmon[3].sdi[63:0]
+(63)testbench.sigmon[3].sdi[63:0]
+@1401201
+-group_end
+@22
+testbench.sigmon[4].sdi[63:0]
+@8022
+testbench.dut.tdm.mcnt[5:0]
+@28
+testbench.dut.SCK
+@22
+testbench.dut.SD[1:4]
+@28
+testbench.dut.WS
+testbench.dut.tdm.sof
+testbench.PI_ALN
+@22
+testbench.sigmon[1].sdo[63:0]
+testbench.sigmon[2].sdo[63:0]
+testbench.sigmon[3].sdo[63:0]
+testbench.sigmon[4].sdo[63:0]
+testbench.dut.tdm.pcnt[5:0]
+@28
+testbench.dut.PI_SCK
+testbench.dut.PI_SD
+testbench.dut.PI_WS
+@200
+-
+@22
+testbench.sigmon[1].psdi[63:0]
+testbench.sigmon[2].psdi[63:0]
+testbench.sigmon[3].psdi[63:0]
+testbench.sigmon[4].psdi[63:0]
+@100000028
+testbench.pi.pstate[1:0]
+@24
+testbench.pi.ptype[31:0]
+testbench.pi.error[31:0]
+@28
+testbench.pi.eof
+@24
+testbench.pi.id[2:0]
+[pattern_trace] 1
+[pattern_trace] 0

@@ -1,0 +1,4 @@
+{
+    // Supress the welcome editor.
+    "workbench.startupEditor": "none"
+}

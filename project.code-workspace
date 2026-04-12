@@ -1,0 +1,12 @@
+{
+  "folders": [
+    { "path": "fpga", "name": "FPGA" },
+    { "path": "./" ,  "name": "TOP"}
+  ],
+  "settings": {
+    "files.exclude": {
+      "fpga": true
+    },
+    "window.title": "i2s-tdm - ${folderName} - ${appName}"
+  }   
+}
