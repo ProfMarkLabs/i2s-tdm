@@ -1,0 +1,56 @@
+[*]
+[*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
+[*] Tue Apr 07 20:46:55 2026
+[*]
+[dumpfile] "C:\Users\c33107\OneDrive - University of Ottawa\Projects\Capstone-BF-CNN\apio-test\_build\loopback\loopback_tb.vcd"
+[dumpfile_mtime] "Tue Apr 07 20:45:14 2026"
+[dumpfile_size] 15308452
+[savefile] "C:\Users\c33107\OneDrive - University of Ottawa\Projects\Capstone-BF-CNN\apio-test\loopback_tb.gtkw"
+[timestart] 47539000
+[size] 1696 1020
+[pos] -1 -1
+*-19.846453 49554660 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] testbench.
+[sst_width] 246
+[signals_width] 250
+[sst_expanded] 1
+[sst_vpaned_height] 305
+@22
+testbench.genblk1[1].sdi[63:0]
+testbench.genblk1[2].sdi[63:0]
+testbench.genblk1[3].sdi[63:0]
+testbench.genblk1[4].sdi[63:0]
+@8024
+testbench.dut.mcnt[4:0]
+@28
+testbench.SCK
+testbench.WS
+@22
+testbench.SD[1:4]
+testbench.genblk1[1].sdo[63:0]
+testbench.genblk1[2].sdo[63:0]
+testbench.genblk1[3].sdo[63:0]
+testbench.genblk1[4].sdo[63:0]
+@8024
+testbench.dut.pcnt[4:0]
+@28
+testbench.PI_SCK
+testbench.PI_WS
+testbench.PI_SD
+testbench.PI_ALN
+testbench.dut.sof
+testbench.dut.state[1:0]
+@22
+testbench.dut.psdi[255:0]
+testbench.genblk1[1].psdi[63:0]
+testbench.genblk1[2].psdi[63:0]
+testbench.genblk1[3].psdi[63:0]
+testbench.genblk1[4].psdi[63:0]
+@8022
+testbench.dut.bitcnt[7:0]
+@28
+testbench.PSCK
+testbench.PWS
+testbench.PSD
+[pattern_trace] 1
+[pattern_trace] 0

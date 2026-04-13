@@ -1,0 +1,43 @@
+# ********************************************************
+# LOOPBACK build only - DO NOT USE for student projects
+# ********************************************************
+
+# FPGA Pin Constraint File (PCF)
+# TDM Aggregator with 8 mics
+
+# SPDX-FileCopyrightText: (C) 2026 Mark Warriner
+# SPDX-License-Identifier: 0BSD
+
+set_io REFCLK  P7  # input  - 12MHz reference clock
+set_io CORECLK P9  # output - constaint hack and test point
+
+# Upstream interface with MEMS mics
+set_io SCK    H12  # output - I2S clock to mics via buffer
+set_io WS     G14  # output - I2S word select to all 8 mics
+set_io SD[1]  G12  # input  - I2S data from mics 1L and 1R
+set_io SD[2]  F14  # input  - I2S data from mics 2L and 2R
+set_io SD[3]  F12  # input  - I2S data from mics 3L and 3R
+set_io SD[4]  E14  # input  - I2S data from mics 4L and 4R
+
+# Downstream interface with Raspberry Pi 5
+set_io PI_SCK B14  # output - I2S clock to Pi
+set_io PI_WS  C12  # output - I2S word select to Pi
+set_io PI_SD  C14  # output - I2S data to Pi
+set_io PI_ALN D12  # input  - alignment control from Pi
+set_io PI_SDA D14  # inout  - I2C data to/from Pi
+set_io PI_SCL E12  # input  - I2C clock from Pi
+
+# LOOPBACK interfaces
+set_io MSD[1] F3   # output - I2S data from mics 1L and 1R
+set_io MSD[2] E1   # output - I2S data from mics 2L and 2R
+set_io MSD[3] D1   # output - I2S data from mics 3L and 3R
+set_io MSD[4] C1   # output - I2S data from mics 4L and 4R
+set_io MSCK   H3   # input  - I2S clock to mics
+set_io MWS    G3   # input  - I2S word select to mics
+set_io PSCK   A3   # input  - I2S clock to Pi
+set_io PWS    A2   # input  - I2S word select to Pi
+set_io PSD    A1   # input  - I2S data to Pi
+set_io PALN   C3   # output - alignment control from Pi
+
+set_frequency REFCLK  12.0
+set_frequency CORECLK 25.8
