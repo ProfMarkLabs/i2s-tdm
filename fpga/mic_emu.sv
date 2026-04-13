@@ -1,7 +1,8 @@
 // MEMS Mic Emulator
+
 // I2S clock consumer, data output
-// Generates alignment pattern, PRBS-31, an tagged frames
-// Synthesizable for LOOPBACK design, simulation for MAIN design
+// Generates alignment pattern + PRBS-31 (mtype=0) and tagged frames (mtype=1)
+// Note: For simulation use only
 
 // SPDX-FileCopyrightText: (C) 2026 Mark Warriner
 // SPDX-License-Identifier: 0BSD
@@ -13,7 +14,7 @@ module mic_emu #(
 
   ) (
 
-  input  logic mtype,  // Test type: 0:PRBS-31 1:Tagged frames
+  input  int   mtype,  // Test type: 0:PRBS-31 1:Tagged frames
 
   input  logic SCK,    // I2S clock to mics
   input  logic WS,     // I2S word select to mics

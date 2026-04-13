@@ -16,6 +16,7 @@ module i2c #(
   output logic p_sda_o,    // I2C ACK output to Pi, open-drain: 0 or Z
 
   output logic [7:0] ctrl  // Control register value to core
+                           // TODO: Add synchronization
 
 );
 

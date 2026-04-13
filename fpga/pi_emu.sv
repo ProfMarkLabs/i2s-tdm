@@ -1,7 +1,8 @@
 // Pi Emulator
+
 // I2S clock consumer, data input
-// Alignment + PRBS checker
-// Synthesizable for LOOPBACK design, simulation for MAIN design
+// Checks alignment patter, PRBS-31 (mtype=0), and tagged frames (mtype=1)
+// Note: For simulation use only
 
 // SPDX-FileCopyrightText: (C) 2026 Mark Warriner
 // SPDX-License-Identifier: 0BSD
