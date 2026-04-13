@@ -83,7 +83,7 @@ initial begin
   $dumpvars(0, testbench);
 
   ///////////////////////////////////////////////////////////////////////////
-  // TEST #1: TDM with PRBS-31 from mics
+  $display("TEST #1: TDM with PRBS-31 from mics");
 
   // At startup, the mic models automatically send an alignment pattern, then
   // start their PRBS generators, each with a different seed. The Pi model
@@ -93,7 +93,7 @@ initial begin
   #1ms;
 
   ///////////////////////////////////////////////////////////////////////////
-  // TEST #2: TDM with tagged frames from mics
+  $display("TEST #2: TDM with tagged frames from mics");
 
   // Here we reconfigure the generator (mic models) and checker (Pi model)
   // to use a different test pattern that includes the channel ID and a frame
@@ -113,7 +113,7 @@ initial begin
   #1ms;
 
   ///////////////////////////////////////////////////////////////////////////
-  // TEST #3: I2S mux with tagged frames from mics
+  $display("TEST #3: I2S mux with tagged frames from mics");
 
   // Here we reconfigure the DUT as an I2S multiplexor where, instead of
   // acting as a TDM aggregator from all mics, it simply passes a single
@@ -123,6 +123,7 @@ initial begin
   // TODO: Add automated checking for this test
 
   ptype = 2;
+
   pi.pstate = pi.STOP;
   pi.id = 0;
 
@@ -132,24 +133,25 @@ initial begin
   end
 
   ///////////////////////////////////////////////////////////////////////////
-  // TEST #4: TDM with tagged frames from DUT internal generator
+  $display("TEST #4: TDM with tagged frames from DUT internal generator");
 
   // We return to TDM aggregation, this time using the internal tagged
   // frame generator in the DUT. We also test realignment via I2C instead
   // of the GPIO pin. To ensure the mics are no longer usable, we disable
   // their clock and invalidate their output data.
 
-/*
-  // TODO:TEMP: Disabled for now
-  force SCK = '0;
-  force SD  = 'x;
+  ptype = 1;
+
   pi.pstate = pi.STOP;
-  WriteControlRegister(8'h8D);  // Disable data stream and realign
+  pi.id = 0;
+  // Enable tagged frame generator and realign via I2C
+  WriteControlRegister(8'h8F);
   wait (dut.tdm.state == dut.tdm.STOP);
-  WriteControlRegister(8'h0F);  // Enable tagged frame generator
+  WriteControlRegister(8'h0F);
+
+  force SD = 'x;  // Invalidate data from mics to avoid false pass
 
   #1ms;
-*/
 
   ///////////////////////////////////////////////////////////////////////////
 
@@ -168,7 +170,7 @@ generate
 for (genvar i = 1; i <= M; i++) begin : sigmon
 
   logic [31:0] msdo_L, msdo_R;
-  logic [63:0] msdo, msdo_new, sdi, sdi_new, sdo, sdo_new, psdi;
+  logic [63:0] msdo, msdo_new, tsdo, tsdo_new, sdi, sdi_new, sdo, sdo_new, psdi;
 
   // Mic transmitters (each channel)
   always begin
@@ -183,6 +185,10 @@ for (genvar i = 1; i <= M; i++) begin : sigmon
 
   always begin
     @(posedge dut.tdm.sof);
+
+    // Test pattern generator
+    tsdo = tsdo_new;
+    tsdo_new = dut.tstgen.mic[i].tsdo;
 
     // Mic transmitters (combined)
     msdo = msdo_new;
@@ -199,11 +205,11 @@ for (genvar i = 1; i <= M; i++) begin : sigmon
     sdo_new = dut.tdm.sdo[64*(M-i) +:64];
 
     // Check output framing
-    if (ptype != 2)
-      assert (mic[i].R.mfcnt < 1 || dut.tdm.pcnt === '0 && PI_WS === 1)
+    if (mic[i].R.mfcnt > 0 && pi.id > 0 && ptype != 2 && dut.ctrl[3:0] != 'hD && dut.ctrl[3:0] != 'hF)
+      assert (dut.tdm.pcnt === '0 && PI_WS === 1)
         else $error("i=%0d pcnt=%0d (exp %0d) PI_WS=%0b (exp %0b)", i, dut.tdm.pcnt, 0, PI_WS, 1);
 
-    @(negedge PI_SCK);
+    @(negedge dut.p_fall);
 
     // Pi receiver
     psdi = pi.psdi[64*(M-i) +:64];
@@ -212,8 +218,9 @@ for (genvar i = 1; i <= M; i++) begin : sigmon
     // Note: Extra conditions help ignore transients while changing modes
     if (ptype != 2 && pi.pstate == pi.RUN && (ptype == 0 || pi.psdi !== '1))
       assert (mic[i].R.mfcnt < 2 || sdi === msdo && sdo === sdi && psdi === sdo)
-        else $error("i=%0d msdo=%16h sdi=%16h sdo=%16h psdi=%16h",
-                     i,    msdo,     sdi,     sdo,     psdi);
+        else $error("i=%0d %s=%16h sdi=%16h sdo=%16h psdi=%16h",
+                     i, dut.ctrl[3:0] == 'hF ? "tsdo" : "msdo",
+                        dut.ctrl[3:0] == 'hF ?  tsdo :   msdo, sdi, sdo, psdi);
   end
 
   wire logic [30:0] plfsr_L = pi.plfsr_L[i];
@@ -221,16 +228,6 @@ for (genvar i = 1; i <= M; i++) begin : sigmon
 
 end : sigmon
 endgenerate
-
-// Monitor PRBS generator/checker for one mic only
-always @(posedge SCK)
-  if (mic[M].R.eof && mic[M].R.mstate == mic[M].R.RUN && mtype == 0)
-    $info("PRBS gen: mic %0dL: LFSR=%08h nextLFSR=%08x data=%08h",
-          M, mic[M].R.mlfsr, mic[M].R.next_mlfsr, mic[M].R.next_msdo);
-always @(posedge PI_SCK)
-  if (pi.eof && pi.pstate == pi.RUN && ptype == 0)
-    $info("PRBS chk: mic %0dR: LSFR=%08X nextLSFR==%08X data=%08X",
-          M, pi.plfsr_R[M], pi.next_plfsr_R[M], pi.next_psdi[31:0]);
 
 // ------------------------------------------------------------------
 // I2C host controller model

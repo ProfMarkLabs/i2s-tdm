@@ -33,6 +33,7 @@ module io_ring #(
     input  logic       m_rise,  // I2S clock output to mics
     input  logic       m_fall,
     input  logic       m_ws_o,  // I2S word select output to mics
+    input  logic [1:M] m_sd_ti, // Test pattern loopback
     output logic [1:M] m_sd_i,  // I2S data input from mics
 
     input logic p_rise,  // I2S clock output to Pi
@@ -60,16 +61,22 @@ initial WS = 0;
 var logic m_ws_q = 0;
 always_ff @(posedge clk) if (m_fall) {WS, m_ws_q} <= {2{m_ws_o}};
 
-// SD[1:M]: Direct input (registered in core logic)
-assign m_sd_i = SD;
+// SD[1:M]: Input with test mux, registered in core logic
+always_comb
+  case (ctrl[3:0])
+    'hD:     m_sd_i = '0;       // Disabled
+    'hF:     m_sd_i = m_sd_ti;  // Test pattern loopback
+    default: m_sd_i = SD;       // Data from mics
+  endcase
 
 // PI_SCK: I2S clock generator
 // IMPORTANT: Use blocking assignment for generated clocks
 initial PI_SCK = 1;
 always_ff @(posedge clk)
   case (ctrl[3:0])
-    'hD:     PI_SCK = 0;  // Disabled
-    'h0:     if (p_rise) PI_SCK = 1;  // TDM
+    'hD:     PI_SCK = 0;              // Disabled
+    'h0:     if (p_rise) PI_SCK = 1;  // TDM mic data
+    'hF:     if (p_rise) PI_SCK = 1;  // TDM test pattern
 else if (p_fall) PI_SCK = 0;
     default: if (m_rise) PI_SCK = 1;  // M:1 Mux
 else if (m_fall) PI_SCK = 0;
@@ -79,8 +86,9 @@ else if (m_fall) PI_SCK = 0;
 initial PI_WS = 0;
 always_ff @(posedge clk)
   case (ctrl[3:0])
-    'hD:     PI_WS <= 0;  // Disabled
-    'h0:     if (p_fall) PI_WS <= p_ws_o;  // TDM
+    'hD:     PI_WS <= 0;                   // Disabled
+    'h0:     if (p_fall) PI_WS <= p_ws_o;  // TDM mic data
+    'hF:     if (p_fall) PI_WS <= p_ws_o;  // TDM test pattern
     default: if (m_fall) PI_WS <= m_ws_q;  // M:1 Mux
   endcase
 
@@ -88,8 +96,9 @@ always_ff @(posedge clk)
 initial PI_SD = 0;
 always_ff @(posedge clk)
   case (ctrl[3:0])
-    'hD:     PI_SD <= 0;  // Disabled
-    'h0:     if (p_fall) PI_SD <= p_sd_o;  // TDM
+    'hD:     PI_SD <= 0;                   // Disabled
+    'h0:     if (p_fall) PI_SD <= p_sd_o;  // TDM mic data
+    'hF:     if (p_fall) PI_SD <= p_sd_o;  // TDM test pattern
     default: if (m_fall) PI_SD <= SD[ctrl[3:0]];  // M:1 Mux
   endcase
 

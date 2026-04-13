@@ -1,23 +1,26 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Sun Apr 12 18:59:29 2026
+[*] Mon Apr 13 17:51:12 2026
 [*]
-[dumpfile] "C:\Users\c33107\OneDrive - University of Ottawa\Projects\Capstone-BF-CNN\apio-test\_build\tdm8\main_tb.vcd"
-[dumpfile_mtime] "Sun Apr 12 18:59:03 2026"
-[dumpfile_size] 72978636
-[savefile] "C:\Users\c33107\OneDrive - University of Ottawa\Projects\Capstone-BF-CNN\apio-test\main_tb.gtkw"
-[timestart] 1487000000
+[dumpfile] "C:\Users\c33107\OneDrive - University of Ottawa\Projects\Capstone-BF-CNN\i2s-tdm\fpga\_build\tdm8\main_tb.vcd"
+[dumpfile_mtime] "Mon Apr 13 17:51:05 2026"
+[dumpfile_size] 98611890
+[savefile] "C:\Users\c33107\OneDrive - University of Ottawa\Projects\Capstone-BF-CNN\i2s-tdm\fpga\main_tb.gtkw"
+[timestart] 254000000
 [size] 1920 1082
-[pos] -1 -1
-*-27.910498 1056480000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[pos] 6 -2
+*-29.033375 401247396 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] testbench.
 [treeopen] testbench.dut.
+[treeopen] testbench.dut.tstgen.
 [treeopen] testbench.mic[1].
 [treeopen] testbench.sigmon[1].
 [sst_width] 247
 [signals_width] 264
 [sst_expanded] 1
 [sst_vpaned_height] 342
+@200
+-mics
 @420
 testbench.mtype
 @28
@@ -27,8 +30,6 @@ testbench.mic[1].L.SD
 testbench.mic[1].L.mstate[1:0]
 @22
 testbench.mic[1].L.mfcnt[15:0]
-@24
-testbench.mic[1].R.mtype
 @28
 testbench.mic[1].R.eof
 testbench.mic[1].R.SD
@@ -36,19 +37,30 @@ testbench.mic[1].R.SD
 testbench.mic[1].R.mstate[1:0]
 @22
 testbench.mic[1].R.mfcnt[15:0]
-@200
--
-@22
 testbench.sigmon[1].msdo[63:0]
 testbench.sigmon[2].msdo[63:0]
 testbench.sigmon[3].msdo[63:0]
 testbench.sigmon[4].msdo[63:0]
 @200
--
+-tstgen
+@22
+testbench.dut.io_ring.ctrl[7:0]
+@28
+testbench.dut.tstgen.eof
+@24
+testbench.dut.tstgen.mic[1].tcnt[15:0]
+@22
+testbench.sigmon[1].tsdo[63:0]
+testbench.sigmon[2].tsdo[63:0]
+testbench.sigmon[3].tsdo[63:0]
+testbench.sigmon[4].tsdo[63:0]
+testbench.dut.tstgen.m_sd_ti[1:4]
+@200
+-tdm
 @22
 testbench.sigmon[1].sdi[63:0]
 testbench.sigmon[2].sdi[63:0]
-@c00023
+@c00022
 testbench.sigmon[3].sdi[63:0]
 @28
 (0)testbench.sigmon[3].sdi[63:0]
@@ -115,16 +127,16 @@ testbench.sigmon[3].sdi[63:0]
 (61)testbench.sigmon[3].sdi[63:0]
 (62)testbench.sigmon[3].sdi[63:0]
 (63)testbench.sigmon[3].sdi[63:0]
-@1401201
+@1401200
 -group_end
 @22
 testbench.sigmon[4].sdi[63:0]
-@8022
+@8024
 testbench.dut.tdm.mcnt[5:0]
 @28
 testbench.dut.SCK
 @22
-testbench.dut.SD[1:4]
+testbench.dut.m_sd_i[1:4]
 @28
 testbench.dut.WS
 testbench.dut.tdm.sof
@@ -134,13 +146,15 @@ testbench.sigmon[1].sdo[63:0]
 testbench.sigmon[2].sdo[63:0]
 testbench.sigmon[3].sdo[63:0]
 testbench.sigmon[4].sdo[63:0]
+@24
 testbench.dut.tdm.pcnt[5:0]
-@28
+@29
 testbench.dut.PI_SCK
+@28
 testbench.dut.PI_SD
 testbench.dut.PI_WS
 @200
--
+-pi
 @22
 testbench.sigmon[1].psdi[63:0]
 testbench.sigmon[2].psdi[63:0]

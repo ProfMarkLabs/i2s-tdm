@@ -41,6 +41,7 @@ logic [3:0]  mode;     // Operational mode
 logic        m_rise;   // I2S clock output to mics via clock buffer
 logic        m_fall;
 logic        m_ws_o;   // I2S word select output to mics
+logic [1:M]  m_sd_ti;  // Test pattern loopback
 logic [1:M]  m_sd_i;   // I2S multi-lane data input from mics
 
 // Pi interface
@@ -58,6 +59,7 @@ logic        p_scl_i;  // I2C clock input
 io_ring #(.M(M)) io_ring (.*);  // Input/output logic
 clkgen  #(.M(M)) clkgen  (.*);  // Clock Generator
 tdm     #(.M(M)) tdm     (.*);  // TDM Aggregator
+tstgen  #(.M(M)) tstgen  (.*);  // Test Pattern Generator
 i2c              i2c     (.*);  // Mini I2C client
 
 assign CORECLK = clk;     // Constraint hack and test point
