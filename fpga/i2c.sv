@@ -11,12 +11,14 @@ module i2c #(
 
 )(
 
+  input  logic clk,        // Core clock
+  input  logic rst,        // Synchronous reset
+
   input  logic p_scl_i,    // I2C clock from Pi, input only (no stretching)
   input  logic p_sda_i,    // I2C addr/cmd/data input from Pi
   output logic p_sda_o,    // I2C ACK output to Pi, open-drain: 0 or Z
 
   output logic [7:0] ctrl  // Control register value to core
-                           // TODO: Add synchronization
 
 );
 
@@ -32,6 +34,27 @@ var logic       ack =  0;  // Output acknowledge
 initial ctrl = DEF;        // Control register default value in FPGA bitstream
 
 // ------------------------------------------------------------------
+// Input synchronizer and glitch filter
+// ------------------------------------------------------------------
+
+logic [3:0] dly_sda, dly_scl;
+logic sda, scl;
+
+always_ff @(posedge clk)
+  if (rst) begin
+    dly_sda <= '1;  sda <= 1;
+    dly_scl <= '1;  scl <= 1;
+  end
+  else begin
+    dly_sda <= {p_sda_i, dly_sda[3:1]};
+    dly_scl <= {p_scl_i, dly_scl[3:1]};
+    if      (dly_scl[2:0] == '1) scl <= 1;
+    else if (dly_scl[2:0] == '0) scl <= 0;
+    if      (dly_sda[2:0] == '1) sda <= 1;
+    else if (dly_sda[2:0] == '0) sda <= 0;
+  end
+
+// ------------------------------------------------------------------
 // START/STOP detection
 // ------------------------------------------------------------------
 
@@ -39,19 +62,19 @@ initial ctrl = DEF;        // Control register default value in FPGA bitstream
 // Reset recovery/removal guaranteed by I2C timing specifications
 // REUSE NOTE: This logic does not support repeated START condition (Sr)
 
-always_ff @(negedge p_sda_i or posedge stop)
-if      (stop)    active <= 0;
-else if (p_scl_i) active <= 1;  // START condition (S)
+always_ff @(negedge sda or posedge stop)
+if      (stop) active <= 0;
+else if (scl)  active <= 1;  // START condition (S)
 
-always_ff @(posedge p_sda_i or negedge active)
+always_ff @(posedge sda or negedge active)
 if      (!active) stop <= 0;
-else if (p_scl_i) stop <= 1;    // STOP condition (P)
+else if (scl)     stop <= 1;    // STOP condition (P)
 
 // ------------------------------------------------------------------
 // Interface logic: SCL rising edge
 // ------------------------------------------------------------------
 
-always_ff @(posedge p_scl_i or negedge active)
+always_ff @(posedge scl or negedge active)
 
   if (!active) begin
     // Asynchronous reset to idle state
@@ -62,7 +85,7 @@ always_ff @(posedge p_scl_i or negedge active)
 
   // Last bit of target address byte
   else if (cnt == 7) begin
-    if (sr[6:0] == ADR && p_sda_i == 0) begin
+    if (sr[6:0] == ADR && sda == 0) begin
       ack <= 1;        // ACK target address byte for WRITE transfer
       cnt <= cnt + 1;  // Bit counter
     end
@@ -75,17 +98,17 @@ always_ff @(posedge p_scl_i or negedge active)
 
   // Last bit of write data byte
   else if (cnt == 16) begin
-    ack  <=  1;                  // ACK first data byte
-    ctrl <= {sr[6:0], p_sda_i};  // Save write data to control register
-    cnt  <= cnt + 1;             // Bit counter
-    sr   <= 'x;                  // Invalidate for simulation
+    ack  <=  1;              // ACK first data byte
+    ctrl <= {sr[6:0], sda};  // Save write data to control register
+    cnt  <= cnt + 1;         // Bit counter
+    sr   <= 'x;              // Invalidate for simulation
   end
 
   // Intermediate bits
   else if (cnt < 18) begin
-    ack <= 0;                  // Disable driver on input bits from Pi
-    sr <= {sr[6:0], p_sda_i};  // Input data shiter (I2C always MSB-first)
-    cnt <= cnt + 1;            // Bit counter
+    ack <= 0;                // Disable driver on input bits from Pi
+    sr <= {sr[6:0], sda};    // Input data shiter (I2C always MSB-first)
+    cnt <= cnt + 1;          // Bit counter
   end
 
   // Transfer overrun (ignored)
@@ -100,7 +123,7 @@ always_ff @(posedge p_scl_i or negedge active)
 // REUSE NOTE: This logic does not support READ data output
 
 initial         p_sda_o  = 1;  // High-Z on FPGA config
-always_ff @(negedge p_scl_i or negedge active)
+always_ff @(negedge scl or negedge active)
   if  (!active) p_sda_o <= 1;  // High-Z while idle
   else if (ack) p_sda_o <= 0;  // Drive low for output ACK
   else          p_sda_o <= 1;  // High-Z for output NACK or input bit
