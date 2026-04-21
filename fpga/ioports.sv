@@ -1,10 +1,10 @@
-// Input/Output Ring
+// Input/Output Ports
 // Output registers, test mode muxes, tristate logic, etc.
 
 // SPDX-FileCopyrightText: (C) 2026 Mark Warriner
 // SPDX-License-Identifier: 0BSD
 
-module io_ring #(
+module ioports #(
 
     parameter int M  // Number of mic pairs
 

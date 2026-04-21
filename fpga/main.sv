@@ -56,7 +56,7 @@ logic        p_scl_i;  // I2C clock input
 
 // ------------------------------------------------------------------
 
-io_ring #(.M(M)) io_ring (.*);  // Input/output logic
+ioports #(.M(M)) ioports (.*);  // Input/output Ports
 clkgen  #(.M(M)) clkgen  (.*);  // Clock Generator
 tdm     #(.M(M)) tdm     (.*);  // TDM Aggregator
 tstgen  #(.M(M)) tstgen  (.*);  // Test Pattern Generator
