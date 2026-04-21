@@ -39,7 +39,7 @@ var int              next_chkerr = '0,   chkerr = '0;  // Error counter
 var logic wsq = '0;
 always_ff @(posedge SCK)
   wsq <= WS;
-wire logic eof = !wsq && WS && (id == 0 || id == M || ptype == 3);
+wire logic eof = wsq && !WS && (id == 0 || id == M || ptype == 3);
 
 // LSFR per mic, seeded to match PRBS generators in mic models
 logic [30:0] next_plfsr_L [1:M], plfsr_L [1:M], next_plfsr_R [1:M], plfsr_R [1:M];
@@ -159,7 +159,7 @@ always_comb begin
 
   // For TDM mode (PRBS or tagged frames), select next mic pair
   // For Mux mode, this is handled by the testbench
-  if (!wsq && WS && pstate == RUN && ptype != 3)
+  if (wsq && !WS && pstate == RUN && ptype != 3)
     next_id = (id % M) + 1;
 end
 

@@ -68,9 +68,9 @@ always_comb begin
   
   // Word select to mics
   // Value based on bit counter
-  if      (mcnt >= 34) m_ws_o = 1;
-  else if (mcnt <=  1) m_ws_o = 1;
-  else                 m_ws_o = 0;
+  if      (mcnt >= 34) m_ws_o = 0;
+  else if (mcnt <=  1) m_ws_o = 0;
+  else                 m_ws_o = 1;
 
   // Start of frame (SOF) indicator
   // Note: Cleared in logic below
@@ -92,9 +92,9 @@ always_comb begin
 
   // Word select to Pi
   // Value based on bit counter
-  if      (pcnt >= 34) p_ws_o = 1;
-  else if (pcnt <=  1) p_ws_o = 1;
-  else                 p_ws_o = 0;
+  if      (pcnt >= 34) p_ws_o = 0;
+  else if (pcnt <=  1) p_ws_o = 0;
+  else                 p_ws_o = 1;
 
   // Output data shifter to Pi
   // Clock on falling edge, MSB-first, invalidate input for simulation

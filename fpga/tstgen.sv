@@ -30,7 +30,7 @@ wire logic ws = m_ws_li;
 var  logic wsq;
 always @(posedge sck)
   wsq <= ws;
-wire logic eof = !wsq && ws;
+wire logic eof = wsq && !ws;
 
 // Reinitialize LFSR on frame alignment
 var logic init = 1;

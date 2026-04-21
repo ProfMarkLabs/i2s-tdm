@@ -243,9 +243,9 @@ for (genvar i = 1; i <= M; i++) begin : sigmon
 
     // Check output framing of TDM aggregator
     if (dut.tstgen.tcnt > 1)
-      assert (dut.tdm.pcnt === '0 && PI_WS === 1)
+      assert (dut.tdm.pcnt === '0 && PI_WS === 0)
         else $error("monerr=%0d i=%0d pcnt=%0d (exp %0d) PI_WS=%0b (exp %0b)",
-                   ++monerr,    i,    dut.tdm.pcnt, 0,   PI_WS, 1);
+                   ++monerr,    i,    dut.tdm.pcnt, 0,   PI_WS, 0);
   end
 
   // Pi checker
@@ -259,7 +259,7 @@ for (genvar i = 1; i <= M; i++) begin : sigmon
   // Compare latched data throughout pipeline in middle of each frame
   // Note: Extra conditions help ignore transients at startup and when changing modes
   always begin
-    @(negedge MIC_WS);
+    @(posedge MIC_WS);
     if (ptype != 3 && pi.pstate == pi.RUN && pi.pstate_old == pi.RUN)
       assert (dut.tstgen.tcnt < 2 || sdi === tsdo && sdo === sdi && psdi === sdo)
         else $error("monerr=%0d i=%0d tsdo=%16h sdi=%16h sdo=%16h psdi=%16h",
