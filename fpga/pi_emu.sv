@@ -1,8 +1,12 @@
-// Pi Emulator
+// Raspberry Pi 5 - I2S Data Sink Emulator
+// (simulation use only)
 
 // I2S clock consumer, data input
-// Checks alignment patter, PRBS-31 (mtype=0), and tagged frames (mtype=1)
-// Note: For simulation use only
+// Receives and checks the following:
+//  - Frame alignment pattern
+//  - TDM with PRBS-31 (ptype=1)
+//  - TDM with Tagged Frames (ptype=2)
+//  - I2S Mux with Tagged Frames (ptype=3)
 
 // SPDX-FileCopyrightText: (C) 2026 Mark Warriner
 // SPDX-License-Identifier: 0BSD
@@ -13,7 +17,7 @@ module pi_emu #(
 
   ) (
 
-  input  int    ptype,  // Test type: 0:TDM PRBS-31 1:TDM tagged frames 2:Mux
+  input  int    ptype,
 
   input  logic  SCK,
   input  logic  WS,
@@ -24,16 +28,18 @@ module pi_emu #(
 typedef enum logic[1:0] {STOP, SYNC0, SYNC1, RUN} state_t;
 localparam int C = $clog2(M+1);  // Channel ID: 0:alignment 1:M:running
 
-var state_t          next_pstate = STOP, pstate = STOP;
-var logic [M*64-1:0] next_psdi   = '1,   psdi  = '1;  // Input shifter
-var logic [C-1:0]    next_id     = '0,   id    = '0;  // Channel ID
-var logic [31:0]     next_error  = '0,   error = '0;  // Error counter
+var state_t pstate_old = STOP, next_pstate = STOP, pstate = STOP;
+var logic [M*64-1:0] next_psdi   = '1,   psdi   = '1;  // Input shifter
+var logic [C-1:0]    next_id     = '0,   id     = '0;  // Channel ID
+var int              next_chkerr = '0,   chkerr = '0;  // Error counter
 
 // I2S word select (WS) and end of frame (EOF) detection
+// In TDM mode, EOF occurs during rollover from id=M to id=1
+// In Mux mode (ptype=3) or while aligning (id=0), EOF is based solely on WS
 var logic wsq = '0;
 always_ff @(posedge SCK)
   wsq <= WS;
-wire logic eof = !wsq && WS && (id == 0 || id == M) && ptype != 2;
+wire logic eof = !wsq && WS && (id == 0 || id == M || ptype == 3);
 
 // LSFR per mic, seeded to match PRBS generators in mic models
 (* ram_style = "logic", mem2reg *)
@@ -52,22 +58,30 @@ always_comb begin
   next_pstate = pstate;
   next_psdi   = psdi;
   next_id     = id;
-  next_error  = error;
+  next_chkerr = chkerr;
   for (int i = 1; i <= M; i++) begin
     next_plfsr_L[i] = plfsr_L[i];
     next_plfsr_R[i] = plfsr_R[i];
   end
 
-  // Capture one full superframe of data to facilitate simulation checks
+  // Capture one full frame of data to facilitate simulation checks
   // Also used for alignment below
-  next_psdi = {psdi[M*64-2:0], SD};
+  if (ptype == 3) next_psdi = {{(M-1)*64{1'bx}}, psdi[62:0], SD};
+  else            next_psdi = {psdi[M*64-2:0], SD};
 
-  if (eof) begin
+  if (ptype == 0) begin
+    next_pstate = STOP;
+    next_id = 0;
+  end
 
+  else if (eof) begin
     case (pstate)
 
       STOP: begin
         next_id = 0;
+        // Skip alignment for Mux mode
+        if (ptype == 3)
+          next_pstate = RUN;
         if (next_psdi === '0)
           // At least one full TDM frame of all 0s
           next_pstate = SYNC0;
@@ -91,20 +105,10 @@ always_comb begin
           // Back to all 0s again or mixed pattern
           next_pstate = STOP;
 
-      RUN: begin
-        if (ptype == 1)
-          // Tagged frame checker, full TDM frame
-          for (int i = 1; i <= M; i++) begin
-            logic [63:0] tst;  // Check left and right mics together
-            tst = next_psdi[(M-i)*64+:64];
+      RUN:
+        case (ptype)
 
-            if (!(tst[63:56] === 8'(i) && tst[55:48] === 8'hAA
-               && tst[31:24] === 8'(i) && tst[23:16] === 8'hBB))
-            next_error++;
-          end
-
-        if (ptype == 0) begin
-          // PRBS-31 checker, full TDM frame
+        1: // PRBS-31 checker, full TDM frame
           for (int i = 1; i <= M; i++)
             for (int j = 1; j >= 0; j--) begin
               logic [31:0] dat;   // Received data from DUT
@@ -128,16 +132,36 @@ always_comb begin
               // Compare with actual received data
               dat = next_psdi[(M-i)*64+j*32 +:32];
               if (dat !== cmp)
-                next_error++;
+                next_chkerr++;
             end
+
+        2: // Tagged frame checker, full TDM frame
+          for (int i = 1; i <= M; i++) begin
+            logic [63:0] tst;  // Check left and right mics together
+            tst = next_psdi[(M-i)*64+:64];
+
+            if (!(tst[63:56] === 8'(i) && tst[55:48] === 8'hAA
+               && tst[31:24] === 8'(i) && tst[23:16] === 8'hBB))
+            next_chkerr++;
+          end
+
+        3: // Tagged frame checker, single mic pair
+        begin
+          logic [63:0] tst;  // Check left and right mics together
+          tst = next_psdi[63:0];
+
+          if (!(tst[63:56] === 8'(id) && tst[55:48] === 8'hAA
+             && tst[31:24] === 8'(id) && tst[23:16] === 8'hBB))
+            next_chkerr++;
         end
-      end
+
+        endcase
     endcase
   end
 
-  // For TDM modes (PRBS or tagged frames), select next mic pair
-  // For I2S mux mode, this is handled by the testbench
-  if (!wsq && WS && pstate == RUN && ptype != 2)
+  // For TDM mode (PRBS or tagged frames), select next mic pair
+  // For Mux mode, this is handled by the testbench
+  if (!wsq && WS && pstate == RUN && ptype != 3)
     next_id = (id % M) + 1;
 end
 
@@ -146,11 +170,13 @@ always_ff @(posedge SCK) begin
   pstate <= next_pstate;
   psdi   <= next_psdi;
   id     <= next_id;
-  error  <= next_error;
+  chkerr <= next_chkerr;
   for (int i = 1; i <= M; i++) begin
     plfsr_L[i] <= next_plfsr_L[i];
     plfsr_R[i] <= next_plfsr_R[i];
   end
+  if (eof)
+    pstate_old <= pstate;  // For testbench monitor
 end
 
 endmodule

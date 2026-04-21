@@ -1,117 +1,191 @@
-// Input/Output Ports
-// Output registers, test mode muxes, tristate logic, etc.
+// Logic for Input/Output Ports
+// Output registers, input synchronization, test mode muxes, tristate logic
 
 // SPDX-FileCopyrightText: (C) 2026 Mark Warriner
 // SPDX-License-Identifier: 0BSD
 
 module ioports #(
 
-    parameter int M  // Number of mic pairs
+  parameter int M  // Number of mic pairs
 
-) (
+  ) (
 
-    // External interface (primary pins)
+  // Primary pins
+  // Note: Pins with direct connection to core are commented out
 
-    output logic       SCK,
-    output logic       WS,
-    input  logic [1:M] SD,
+//input  logic         REFCLK,
+//output logic         CORECLK,
 
-    output logic PI_SCK,
-    output logic PI_WS,
-    output logic PI_SD,
-    input  logic PI_ALN,
-    inout  logic PI_SDA,
-    input  logic PI_SCL,
+  output logic         MIC_SCK,
+  output logic         MIC_WS,
+  input  logic  [1:M]  MIC_SD,
 
-    // Core interface
+  output logic         PI_SCK,
+  output logic         PI_WS,
+  output logic         PI_SD,
+  input  logic         PI_ALN,
+  inout  logic         PI_SDA,
+  input  logic         PI_SCL,
 
-    input logic       clk,
-    input logic       rst,
-    input logic [7:0] ctrl, // [3:0] Mode 0:TDM 1:M:Mux D:Disabled etc.
-                            // [7]   Align
+  input  logic         MLB_SCK,
+  input  logic         MLB_WS,
+  output logic  [1:M]  MLB_SD,
 
-    input  logic       m_rise,  // I2S clock output to mics
-    input  logic       m_fall,
-    input  logic       m_ws_o,  // I2S word select output to mics
-    input  logic [1:M] m_sd_ti, // Test pattern loopback
-    output logic [1:M] m_sd_i,  // I2S data input from mics
+//input  logic  [3:0]  PB,
+//output logic  [3:0]  LED_R,
+//output logic  [7:0]  LED_C,
 
-    input logic p_rise,  // I2S clock output to Pi
-    input logic p_fall,
-    input logic p_ws_o,  // I2S word select output to Pi
-    input logic p_sd_o,  // I2S data output to Pi
+  // Core logic
 
-    output logic p_aln_i,  // Alignment control input from Pi
-    output logic p_sda_i,  // I2C data input from Pi
-    input  logic p_sda_o,  // I2C data output to Pi
-    output logic p_scl_i   // I2C clock input from Pi
+  input  logic         clk,
+  input  logic         rst,
+  input  logic  [7:0]  ctrl,
+
+  input  logic         m_rise,    // I2S clock output to mics
+  input  logic         m_fall,
+  output logic         m_sck_li,  // I2S clock loopback input
+  input  logic         m_ws_o,    // I2S word select output to mics
+  output logic         m_ws_li,   // I2S word select loopback input
+  output logic  [1:M]  m_sd_i,    // I2S data inputs from mics
+  input  logic  [1:M]  m_sd_lo,   // I2S data loopback outputs
+
+  input  logic         p_rise,    // I2S clock output to Pi
+  input  logic         p_fall,
+  input  logic         p_ws_o,    // I2S word select output to Pi
+  input  logic         p_sd_o,    // I2S data output to Pi
+
+  output logic         p_aln_i,   // Alignment control input from Pi
+
+  output logic         p_sda_i,   // I2C data input from Pi
+  input  logic         p_sda_o,   // I2C data output to Pi
+  output logic         p_scl_i    // I2C clock input from Pi
 
 );
 
-// SCK: Output clock generator
+// ------------------------------------------------------------------
+// Control Register (CR) decoder
+// ------------------------------------------------------------------
+
+// Mode/Mic Select
+// msel=0   tdm=1 : I2S TDM aggregator (interleave data from all mics)
+// msel=1:M tdm=0 : I2S multiplexor    (data from specific mic pair)
+wire logic [3:0] msel = ctrl[3:0];
+wire logic tdm  = (msel == 0);
+
+// Test Pattern Select
+// tpat=0 : PRBS-31 with fixed per-mic seed, reset when aln=1
+// tpat=1 : Tagged frames (lane ID + L/R channel + rolling frame counter)
+wire logic tpat = ctrl[4];
+
+// Internal Loopback Enable
+// ilb=1 : Internal loopback (test pattern)
+// ilb=0 : Microphone (real data) or external loopback (test pattern)
+wire logic ilb = ctrl[6];
+
+// Alignment Enable (TDM mode only)
+// aln=1    : Continuous frames of all 0s
+// aln 1->0 : Exactly one frame of all 1s
+// aln=0    : Normal TDM stream
+wire logic aln = ctrl[7];
+
+// ------------------------------------------------------------------
+// Upstream interface with MEMS microphones
+// ------------------------------------------------------------------
+
+// MIC_SCK
+// Output clock generator
+// Replica for internal loopback
 // IMPORTANT: Use blocking assignment for generated clocks
-initial SCK = 1;
+initial MIC_SCK = 1;
+var logic m_sck_q = 1;
 always_ff @(posedge clk)
-  if (m_rise) SCK = 1;
-  else if (m_fall) SCK = 0;
+  if      (m_rise) {MIC_SCK, m_sck_q} = '1;
+  else if (m_fall) {MIC_SCK, m_sck_q} = '0;
 
-// WS: Output register, falling edge
-// Shadow copy used by I2S mux
-initial WS = 0;
+// MLB_SCK
+// External loopback input with internal loopback mux
+// Used as clock for Test Pattern Generator logic
+assign m_sck_li = ilb ? m_sck_q : MLB_SCK;
+
+// MIC_WS
+// Output register, clocked on falling edge
+// Replica for internal loopback
+initial MIC_WS = 0;
 var logic m_ws_q = 0;
-always_ff @(posedge clk) if (m_fall) {WS, m_ws_q} <= {2{m_ws_o}};
+always_ff @(posedge clk)
+  if (m_fall) {MIC_WS, m_ws_q} <= {2{m_ws_o}};
 
-// SD[1:M]: Input with test mux, registered in core logic
+// MLB_WS
+// External loopback input with internal loopback mux
+// Registered in core logic (end-of-frame detection)
+assign m_ws_li = ilb ? m_ws_q : MLB_WS;
+
+// MLB_SD[1:M]
+// External loopback output, clocked on rising edge (like real mics)
+// Replica for internal loopback
+initial MLB_SD = 0;
+var logic [1:M] m_sd_loq = 0;
+always @(posedge m_sck_li)
+  MLB_SD <= m_sd_lo;
+always @(posedge clk)
+  if (m_rise) m_sd_loq = m_sd_lo;
+
+// MIC_SD[1:M]
+// Input with internal loopback mux
+// Registered in core logic (TDM input shifters)
 always_comb
-  case (ctrl[3:0])
-    'hD:     m_sd_i = '0;       // Disabled
-    'hF:     m_sd_i = m_sd_ti;  // Test pattern loopback
-    default: m_sd_i = SD;       // Data from mics
-  endcase
+  if (ilb) m_sd_i = m_sd_loq; // Internal loopback (test pat)
+  else     m_sd_i = MIC_SD;   // Mics (real data) or ext loopback (test pat)
 
-// PI_SCK: I2S clock generator
+// ------------------------------------------------------------------
+// Downstream interface with Raspberry Pi 5
+// ------------------------------------------------------------------
+
+// PI_SCK
+// Output clock generator
+// Select rate for TDM vs Mux mode
 // IMPORTANT: Use blocking assignment for generated clocks
 initial PI_SCK = 1;
 always_ff @(posedge clk)
-  case (ctrl[3:0])
-    'hD:     PI_SCK = 0;              // Disabled
-    'h0:     if (p_rise) PI_SCK = 1;  // TDM mic data
-    'hF:     if (p_rise) PI_SCK = 1;  // TDM test pattern
-else if (p_fall) PI_SCK = 0;
-    default: if (m_rise) PI_SCK = 1;  // M:1 Mux
-else if (m_fall) PI_SCK = 0;
-  endcase
+  if      (tdm ? p_rise : m_rise) PI_SCK = 1;
+  else if (tdm ? p_fall : m_fall) PI_SCK = 0;
 
-// PI_WS: Output register, falling edge
+// PI_WS
+// Output register, clocked on falling edge
+// Select rate and source for TDM vs Mux mode
 initial PI_WS = 0;
 always_ff @(posedge clk)
-  case (ctrl[3:0])
-    'hD:     PI_WS <= 0;                   // Disabled
-    'h0:     if (p_fall) PI_WS <= p_ws_o;  // TDM mic data
-    'hF:     if (p_fall) PI_WS <= p_ws_o;  // TDM test pattern
-    default: if (m_fall) PI_WS <= m_ws_q;  // M:1 Mux
-  endcase
+  if      ( tdm && p_fall) PI_WS <= p_ws_o;
+  else if (!tdm && m_fall) PI_WS <= m_ws_o;
 
-// PI_SD: Output register, falling edge
+// PI_SD
+// Output register, clocked on falling edge
+// Select rate for TDM vs Mux mode
 initial PI_SD = 0;
 always_ff @(posedge clk)
-  case (ctrl[3:0])
-    'hD:     PI_SD <= 0;                   // Disabled
-    'h0:     if (p_fall) PI_SD <= p_sd_o;  // TDM mic data
-    'hF:     if (p_fall) PI_SD <= p_sd_o;  // TDM test pattern
-    default: if (m_fall) PI_SD <= SD[ctrl[3:0]];  // M:1 Mux
-  endcase
+  if      ( tdm && p_fall) PI_SD <= p_sd_o;
+  else if (!tdm && m_fall) PI_SD <= m_sd_i[msel];
 
-// PI_ALN: Input synchronizer
-var logic [1:0] aln_sync = '0;
-always_ff @(posedge clk) aln_sync <= {ctrl[7] | PI_ALN, aln_sync[1]};
-assign p_aln_i = aln_sync[0];
+// PI_ALN
+// Input synchronizer and source combiner with CR bit
+// Update in middle of frame (MIC_WS 1->0) to ensure timing
+// IMPORTANT: Must be asserted for at least one frame time (48kHz sample)
+var  logic [1:0] aln_sync = '0;
+always_ff @(posedge clk) begin
+  aln_sync <= {PI_ALN, aln_sync[1]};
+  if (m_ws_q && !m_ws_o)
+    p_aln_i <= aln_sync[0] || aln;
+end
 
-// PI_SDA: Bidirectional with open drain driver
+// PI_SDA
+// Bidirectional with open drain driver
 assign p_sda_i = PI_SDA;
 assign PI_SDA  = p_sda_o ? 1'bz : 1'b0;
 
-// PI_SCL: Input only
+// PI_SCL
+// Input only (I2C target, no clock stretch)
 assign p_scl_i = PI_SCL;
+
+// ------------------------------------------------------------------
 
 endmodule

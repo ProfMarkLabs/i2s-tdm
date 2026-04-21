@@ -4,24 +4,52 @@
 # SPDX-FileCopyrightText: (C) 2026 Mark Warriner
 # SPDX-License-Identifier: 0BSD
 
-set_io REFCLK  P7  # input  - 12MHz reference clock
-set_io CORECLK P9  # output - constaint hack and test point
+# Clocks
+set_io REFCLK      P7  # input  - 12MHz reference clock
+set_io CORECLK     P9  # output - Constaint hack and test point
 
-# Upstream interface with MEMS mics
-set_io SCK    H12  # output - I2S clock to mics via buffer
-set_io WS     G14  # output - I2S word select to all 8 mics
-set_io SD[1]  G12  # input  - I2S data from mics 1L and 1R
-set_io SD[2]  F14  # input  - I2S data from mics 2L and 2R
-set_io SD[3]  F12  # input  - I2S data from mics 3L and 3R
-set_io SD[4]  E14  # input  - I2S data from mics 4L and 4R
+# Upstream interface with MEMS microphones
+set_io MIC_SCK    H12  # output - I2S clock to mics via buffer
+set_io MIC_WS     G14  # output - I2S word select to all 8 mics
+set_io MIC_SD[1]  G12  # input  - I2S data from mics 1L and 1R
+set_io MIC_SD[2]  F14  # input  - I2S data from mics 2L and 2R
+set_io MIC_SD[3]  F12  # input  - I2S data from mics 3L and 3R
+set_io MIC_SD[4]  E14  # input  - I2S data from mics 4L and 4R
 
 # Downstream interface with Raspberry Pi 5
-set_io PI_SCK B14  # output - I2S clock to Pi
-set_io PI_WS  C12  # output - I2S word select to Pi
-set_io PI_SD  C14  # output - I2S data to Pi
-set_io PI_ALN D12  # input  - alignment control from Pi
-set_io PI_SDA D14  # inout  - I2C data to/from Pi
-set_io PI_SCL E12  # input  - I2C clock from Pi
+set_io PI_SCK     B14  # output - I2S clock to Pi
+set_io PI_WS      C12  # output - I2S word select to Pi
+set_io PI_SD      C14  # output - I2S data to Pi
+set_io PI_ALN     D12  # input  - Alignment control from Pi
+set_io PI_SDA     D14  # inout  - I2C data to/from Pi
+set_io PI_SCL     E12  # input  - I2C clock from Pi
+
+# Mic external loopbacks
+set_io MLB_SCK     H3  # loopback input
+set_io MLB_WS      G3  # loopback input
+set_io MLB_SD[1]   F3  # loopback output
+set_io MLB_SD[2]   E1  # loopback output
+set_io MLB_SD[3]   D1  # loopback output
+set_io MLB_SD[4]   C1  # loopback output
+
+# Push-buttons and LED Matrix
+set_io PB[0]       A5  # input
+set_io PB[1]      A11  # input
+set_io PB[2]       C6  # input
+set_io PB[3]      C11  # input
+set_io LED_R[0]    C5  # output
+set_io LED_R[1]    A6  # output
+set_io LED_R[2]   D10  # output
+set_io LED_R[3]   A12  # output
+set_io LED_C[7]    C4  # output
+set_io LED_C[6]    A4  # output
+set_io LED_C[5]    C7  # output
+set_io LED_C[4]    A7  # output
+set_io LED_C[3]    D6  # output
+set_io LED_C[2]    D7  # output
+set_io LED_C[1]   A10  # output
+set_io LED_C[0]   C10  # output
 
 set_frequency REFCLK   12.0
 set_frequency CORECLK  25.8
+set_frequency MLB_SCK   3.1

@@ -7,6 +7,10 @@
 
 module testbench;
 
+var int ptype  = 0;  // Pi test type: 0:Disable 1:TDM-PRBS 2:TDM-TF 3:Mux-TF
+var int monerr = 0;  // Monitor error count
+//      pi.chkerr    // Checker error count (FYI)
+
 // ------------------------------------------------------------------
 // Device under test (DUT)
 // ------------------------------------------------------------------
@@ -21,9 +25,9 @@ var  logic REFCLK;
 wire logic CORECLK;
 
 // Mic interface
-wire logic SCK;
-wire logic WS;
-wire logic [1:M] SD;
+wire logic MIC_SCK;
+wire logic MIC_WS;
+wire logic [1:M] MIC_SD;
 
 // Pi interface
 wire logic PI_SCK;
@@ -33,8 +37,23 @@ var  logic PI_ALN;
 wire logic PI_SDA;
 wire logic PI_SCL;
 
+// Mic external loopback
+wire logic MLB_SCK;
+wire logic MLB_WS;
+wire logic [1:M] MLB_SD;
+
+// Push-buttons and LED matrix
+wire logic [3:0] PB;
+wire logic [3:0] LED_R;
+wire logic [7:0] LED_C;
+
 // DUT instantiation
 main #(.M(M)) dut (.*);
+
+// External loopback
+assign MLB_SCK = MIC_SCK;
+assign MLB_WS  = MIC_WS;
+assign MIC_SD  = MLB_SD;
 
 // ------------------------------------------------------------------
 // Clocking
@@ -55,25 +74,15 @@ initial #1us pll_lock = 1;
 assign dut.clkgen.pll.LOCK = pll_lock;
 
 // ------------------------------------------------------------------
-// External models
+// Pattern checker
 // ------------------------------------------------------------------
 
-// MEMS microphones
-// I2S clock consumer, data output
-var int mtype = 0;
-generate
-for (genvar i = 1; i <= M; i++) begin : mic
-  mic_emu #(.ID(i), .LR(0)) L (.mtype, .SCK, .WS, .SD(SD[i]));
-  mic_emu #(.ID(i), .LR(1)) R (.mtype, .SCK, .WS, .SD(SD[i]));
-end : mic
-endgenerate
-
-// Raspberry Pi
+// Raspberry Pi 5 model
 // I2S clock consumer, data input
-var int ptype = 0;
 pi_emu #(.M(M)) pi (.ptype, .SCK(PI_SCK), .WS(PI_WS), .SD(PI_SD));
 
-initial PI_ALN = 0;
+// Note: Pattern generator is internal to DUT and is used with an
+// external or internal loopback in this simulation testbench.
 
 // ------------------------------------------------------------------
 // Test sequence
@@ -83,148 +92,179 @@ initial begin
   $dumpvars(0, testbench);
 
   ///////////////////////////////////////////////////////////////////////////
-  $display("TEST #1: TDM with PRBS-31 from mics");
+  $info("TEST #1: TDM with PRBS-31 (external loopback)");
 
-  // At startup, the mic models automatically send an alignment pattern, then
-  // start their PRBS generators, each with a different seed. The Pi model
-  // waits for the alignment pattern, then runs identically-seeded PRBS
-  // checkers for each channel. We just need to let this run.
+  // Here we configure the generator (DUT) and checker (Pi model) for
+  // PRBS-31, with each microphone using a known unique LFSR seed. We use a
+  // GPIO pin to trigger frame alignment, which automatically enables the
+  // checker.
 
-  #1ms;
-
-  ///////////////////////////////////////////////////////////////////////////
-  $display("TEST #2: TDM with tagged frames from mics");
-
-  // Here we reconfigure the generator (mic models) and checker (Pi model)
-  // to use a different test pattern that includes the channel ID and a frame
-  // counter. We also take this opportunity to test DUT internal frame
-  // alignment, using a GPIO pin. Note that the mic models do not send the
-  // alignment pattern this time (real mics are not capable of this anyway).
-
-  mtype = 1;
-  ptype = 1;
-
-  pi.pstate = pi.STOP;
-  pi.id = 0;
+  ptype = 0;  // Disabled
   PI_ALN = 1;
-  wait (dut.tdm.state == dut.tdm.STOP);
+  WriteControlRegister(8'h00);  // ilb=0 tpat=0 msel=0 (tdm=1)
+  wait (dut.tdm.state == dut.tdm.STOP);  // or > 20.8us delay
+  ptype = 1;  // TDM with PRBS-31
   PI_ALN = 0;
 
   #1ms;
+  TestSummary;
 
   ///////////////////////////////////////////////////////////////////////////
-  $display("TEST #3: I2S mux with tagged frames from mics");
+  $info("TEST #2: TDM with tagged frames (external loopback)");
+
+  // Here we reconfigure the generator (DUT) and checker (Pi model) to use a
+  // different test pattern that includes the lane ID, channel, and a frame
+  // counter. This time, we test frame alignment via I2C instead of GPIO.
+
+  ptype = 0;  // Disabled
+  WriteControlRegister(8'h90);  // aln=1 ilb=0 tpat=1 msel=0 (tdm=1)
+  wait (dut.tdm.state == dut.tdm.STOP);  // or > 20.8us delay
+  ptype = 2;  // TDM with tagged frames
+  WriteControlRegister(8'h10);  // aln=0
+
+  #1ms;
+  TestSummary;
+
+  ///////////////////////////////////////////////////////////////////////////
+  $info("TEST #3: Mux with tagged frames (external loopback)");
 
   // Here we reconfigure the DUT as an I2S multiplexor where, instead of
   // acting as a TDM aggregator from all mics, it simply passes a single
   // stereo channel from one mic pair at a time. Frame alignment is not
-  // required for this mode because it's completely determined by WS.
-
-  // TODO: Add automated checking for this test
-
-  ptype = 2;
-
-  pi.pstate = pi.STOP;
-  pi.id = 0;
+  // required for this mode because there is no TDM. However, we reset the
+  // checker each time we select a new mic pair, so it will ignore any
+  // in-flight frames with the old mic pair ID.
 
   for (int i = 1; i <= M; i++) begin
-    WriteControlRegister(i);
-    #100us;
+    ptype = 0;  // Disabled
+    WriteControlRegister(8'h10 | i);  // ilb=0 tpat=1 msel=i (tdm=0)
+    ptype = 3;  // Mux with tagged frames
+    wait (pi.pstate == pi.RUN);
+    pi.id = i;
+
+    #200us;
+    TestSummary;
   end
 
   ///////////////////////////////////////////////////////////////////////////
-  $display("TEST #4: TDM with tagged frames from DUT internal generator");
+  $info("TEST #4: TDM with tagged frames (internal loopback)");
 
-  // We return to TDM aggregation, this time using the internal tagged
-  // frame generator in the DUT. We also test realignment via I2C instead
-  // of the GPIO pin. To ensure the mics are no longer usable, we disable
-  // their clock and invalidate their output data.
+  // We return to TDM aggregation, this time with internal loopback path. We
+  // go back to using the GPIO pin for frame alignment. Furthermore, we
+  // invalidate the external loopback data to avoid a false pass.
 
-  ptype = 1;
+  ptype = 0;  // Disabled
+  PI_ALN = 1;
+  WriteControlRegister(8'h50);  // ilb=1 tpat=1 msel=0 (tdm=1)
+  wait (dut.tdm.state == dut.tdm.STOP);  // or > 20.8us delay
+  ptype = 2;  // TDM with tagged frames
+  PI_ALN = 0;
 
-  pi.pstate = pi.STOP;
-  pi.id = 0;
-  // Enable tagged frame generator and realign via I2C
-  WriteControlRegister(8'h8F);
-  wait (dut.tdm.state == dut.tdm.STOP);
-  WriteControlRegister(8'h0F);
-
-  force SD = 'x;  // Invalidate data from mics to avoid false pass
+  force MIC_SD = 'x;  // Invalidate
 
   #1ms;
+  TestSummary;
 
   ///////////////////////////////////////////////////////////////////////////
 
   $finish;
 end
 
-// Check Pi model for recorded errors
-final assert (pi.error == 0)
-  else $error("Simulation FAILED with %0d checker errors", pi.error);
+// ------------------------------------------------------------------
+// Summary reports
+// ------------------------------------------------------------------
+
+// Summary at the end of each test with configuration and error counts
+task TestSummary;
+  assert (pi.pstate === pi.RUN)
+    else $error("monerr=%0d : Checker did not reach RUN state!", ++monerr);
+  $display("msel=%0d tpat=%0d ilb=%0b tcnt=%0d monerr=%0d chkerr=%0d",
+           dut.ioports.msel, dut.tstgen.tpat, dut.ioports.ilb,
+           dut.tstgen.tcnt, monerr, pi.chkerr);
+endtask
+
+// Final summary at end of simulation with error counts
+final begin
+  bit result;
+  string summary;
+
+  result = (monerr == 0 && pi.chkerr === 0);
+  $sformat(summary, "Simulation %0s with %0d monitor error%0s and %0d checker error%0s",
+           result ? "finished" : "FAILED", monerr,    monerr == 1 ? "" : "s",
+                                        pi.chkerr, pi.chkerr == 1 ? "" : "s");
+  assert (result) $info (summary);
+    else          $error(summary);
+end
 
 // ------------------------------------------------------------------
-// Internal data monitors (DEBUG)
+// Datapath monitors
 // ------------------------------------------------------------------
+
+// Here we monitor the pipeline and confirm that the data matches where
+// expected. This is in addition to the checks done in the Pi model.
+
+// IMPORTANT: We insert frame delays so that the signals line up in the
+// simulation waveform for easy comparison.
 
 generate
 for (genvar i = 1; i <= M; i++) begin : sigmon
 
-  logic [31:0] msdo_L, msdo_R;
-  logic [63:0] msdo, msdo_new, tsdo, tsdo_new, sdi, sdi_new, sdo, sdo_new, psdi;
+  logic [63:0] tsdo, tsdo_new, tsdo_newer, sdi, sdi_new, sdo, sdo_new, psdi;
 
-  // Mic transmitters (each channel)
+  // Test pattern generator
   always begin
-    @(negedge mic[i].L.eof);
-    @(negedge SCK);
-    msdo_L = mic[i].L.msdo[31:0];
-
-    @(negedge mic[i].R.eof)
-    @(negedge SCK);
-    msdo_R  = mic[i].R.msdo[31:0];
+    @(negedge dut.tstgen.eof);  // Output shifter reload
+    @(negedge dut.tstgen.sck);
+    tsdo = tsdo_new;        // 2 frame delay
+    tsdo_new = tsdo_newer;  // 1 frame delay
+    tsdo_newer = dut.tstgen.mic[i].tsdo;
+    if (ptype == 3)
+      tsdo = tsdo_new;  // Reduced pipeline latency in Mux mode
   end
 
+  // Input data shifter
   always begin
-    @(posedge dut.tdm.sof);
-
-    // Test pattern generator
-    tsdo = tsdo_new;
-    tsdo_new = dut.tstgen.mic[i].tsdo;
-
-    // Mic transmitters (combined)
-    msdo = msdo_new;
-    msdo_new = msdo_L << 32 | msdo_R << 0;
-
-    // Input data shifter
-    sdi = sdi_new;
+    @(posedge dut.tdm.sof);  // Input shift complete
+    @(negedge dut.clk);
+    sdi = sdi_new;  // 1 frame delay
     sdi_new = dut.tdm.sdi[i];
-
-    @(negedge dut.tdm.sof);
-
-    // Output data shifter
-    sdo = sdo_new;
-    sdo_new = dut.tdm.sdo[64*(M-i) +:64];
-
-    // Check output framing
-    if (mic[i].R.mfcnt > 0 && pi.id > 0 && ptype != 2 && dut.ctrl[3:0] != 'hD && dut.ctrl[3:0] != 'hF)
-      assert (dut.tdm.pcnt === '0 && PI_WS === 1)
-        else $error("i=%0d pcnt=%0d (exp %0d) PI_WS=%0b (exp %0b)", i, dut.tdm.pcnt, 0, PI_WS, 1);
-
-    @(negedge dut.p_fall);
-
-    // Pi receiver
-    psdi = pi.psdi[64*(M-i) +:64];
-
-    // Compare data throughout pipeline
-    // Note: Extra conditions help ignore transients while changing modes
-    if (ptype != 2 && pi.pstate == pi.RUN && (ptype == 0 || pi.psdi !== '1))
-      assert (mic[i].R.mfcnt < 2 || sdi === msdo && sdo === sdi && psdi === sdo)
-        else $error("i=%0d %s=%16h sdi=%16h sdo=%16h psdi=%16h",
-                     i, dut.ctrl[3:0] == 'hF ? "tsdo" : "msdo",
-                        dut.ctrl[3:0] == 'hF ?  tsdo :   msdo, sdi, sdo, psdi);
+    if (ptype == 3)
+      sdi  = sdi_new;  // Reduced pipeline latency in Mux mode
   end
 
-  wire logic [30:0] plfsr_L = pi.plfsr_L[i];
-  wire logic [30:0] plfsr_R = pi.plfsr_R[i];
+  // Output data shifter
+  always begin
+    @(negedge dut.tdm.sof);  // Parallel load complete
+    @(negedge dut.clk);
+    sdo = sdo_new;  // 1 frame delay
+    sdo_new = dut.tdm.sdo[64*(M-i) +:64];
+    if (ptype == 3)
+      sdo = sdi_new;  // Reduced pipeline latency in Mux mode
+
+    // Check output framing of TDM aggregator
+    if (dut.tstgen.tcnt > 1)
+      assert (dut.tdm.pcnt === '0 && PI_WS === 1)
+        else $error("monerr=%0d i=%0d pcnt=%0d (exp %0d) PI_WS=%0b (exp %0b)",
+                   ++monerr,    i,    dut.tdm.pcnt, 0,   PI_WS, 1);
+  end
+
+  // Pi checker
+  always begin
+    @(posedge dut.tdm.sof);  // Input shift complete
+    @(negedge pi.eof);       // Received end of frame
+    @(negedge pi.SCK);
+    psdi = pi.psdi[64*(M-i) +:64];
+  end
+
+  // Compare latched data throughout pipeline in middle of each frame
+  // Note: Extra conditions help ignore transients at startup and when changing modes
+  always begin
+    @(negedge MIC_WS);
+    if (ptype != 3 && pi.pstate == pi.RUN && pi.pstate_old == pi.RUN)
+      assert (dut.tstgen.tcnt < 2 || sdi === tsdo && sdo === sdi && psdi === sdo)
+        else $error("monerr=%0d i=%0d tsdo=%16h sdi=%16h sdo=%16h psdi=%16h",
+                   ++monerr,    i,    tsdo,     sdi,     sdo,     psdi);
+  end
 
 end : sigmon
 endgenerate
@@ -242,40 +282,46 @@ pullup(PI_SCL);
 assign PI_SDA = sda ? 1'bz : 1'b0;
 assign PI_SCL = scl ? 1'bz : 1'b0;
 
+// Quarter and half cycle delays, based on 100kHz
+localparam realtime QD = 2.5us, HD = 5.0us;
+
 task WriteControlRegister (input logic [7:0] ctrl);
   logic [7:0] sr;
 
-  // Check for idle state and send START condition
-  assert (PI_SDA === 1 && PI_SCL === 1);
-  #5us sda = 0; #5us scl = 0;
+  $display("%m: 'h%02h", ctrl);
+
+  // Confirm idle state, then send START condition
+  assert (PI_SDA === 1 && PI_SCL === 1)
+    else $fatal(0, "monerr=%0d : I2C bus error", ++monerr);
+  #HD sda = 0; #HD scl = 0;
 
   sr = {7'h20, 1'b0};               // Target address byte, WRITE transfer
   repeat (8) begin
-    #2.5us sda = sr[7];
+    #QD sda = sr[7];
     sr = sr << 1;
-    #2.5us scl = 1;
-    #5us   scl = 0;
+    #QD scl = 1;
+    #HD scl = 0;
   end
-  #2.5us sda = 1;                   // Release
-  #2.5us scl = 1;
+  #QD sda = 1;                   // Release
+  #QD scl = 1;
   assert (PI_SDA === 0);            // Check for ACK
-  #5us scl = 0;
+  #HD scl = 0;
 
   sr = ctrl;                        // Write data byte
   repeat (8) begin
-    #2.5us sda = sr[7];
+    #QD sda = sr[7];
     sr = sr << 1;
-    #2.5us scl = 1;
-    #5us   scl = 0;
+    #QD scl = 1;
+    #HD scl = 0;
   end
-  #2.5us sda = 1;                   // Release
-  #2.5us scl = 1;
+  #QD sda = 1;                   // Release
+  #QD scl = 1;
   assert (PI_SDA === 0);            // Check for ACK
-  #5us scl = 0;
+  #HD scl = 0;
 
   // Send STOP condition and minimum idle time
-  #2.5us sda = 0; #2.5us scl = 1; #5us sda = 1;
-  #10us;
+  #QD sda = 0; #QD scl = 1; #HD sda = 1;
+  #HD sda = 1;
 
 endtask
 
