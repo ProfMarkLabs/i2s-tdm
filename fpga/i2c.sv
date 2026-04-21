@@ -1,5 +1,6 @@
 // Mini I2C client
 // Single 8-bit write-only control register
+// Note: See ioports for synchronization and glitch filter
 
 // SPDX-FileCopyrightText: (C) 2026 Mark Warriner
 // SPDX-License-Identifier: 0BSD
@@ -11,9 +12,6 @@ module i2c #(
 
 )(
 
-  input  logic clk,        // Core clock
-  input  logic rst,        // Synchronous reset
-
   input  logic p_scl_i,    // I2C clock from Pi, input only (no stretching)
   input  logic p_sda_i,    // I2C addr/cmd/data input from Pi
   output logic p_sda_o,    // I2C ACK output to Pi, open-drain: 0 or Z
@@ -24,6 +22,9 @@ module i2c #(
 
 // ------------------------------------------------------------------
 
+wire logic sda = p_sda_i;
+wire logic scl = p_scl_i;
+
 var logic active = 0;      // Active transfer in progress
 var logic stop   = 0;      // Asynchronous pulse to reset active
 
@@ -32,27 +33,6 @@ var logic [4:0] cnt = '0;  // Bit counter: 7 addr + read/write + ACK + 8 data + 
 var logic       ack =  0;  // Output acknowledge
 
 initial ctrl = DEF;        // Control register default value in FPGA bitstream
-
-// ------------------------------------------------------------------
-// Input synchronizer and glitch filter
-// ------------------------------------------------------------------
-
-logic [3:0] dly_sda, dly_scl;
-logic sda, scl;
-
-always_ff @(posedge clk)
-  if (rst) begin
-    dly_sda <= '1;  sda <= 1;
-    dly_scl <= '1;  scl <= 1;
-  end
-  else begin
-    dly_sda <= {p_sda_i, dly_sda[3:1]};
-    dly_scl <= {p_scl_i, dly_scl[3:1]};
-    if      (dly_scl[2:0] == '1) scl <= 1;
-    else if (dly_scl[2:0] == '0) scl <= 0;
-    if      (dly_sda[2:0] == '1) sda <= 1;
-    else if (dly_sda[2:0] == '0) sda <= 0;
-  end
 
 // ------------------------------------------------------------------
 // START/STOP detection

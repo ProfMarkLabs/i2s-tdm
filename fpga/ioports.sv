@@ -89,7 +89,7 @@ wire logic ilb = ctrl[6];
 wire logic aln = ctrl[7];
 
 // ------------------------------------------------------------------
-// Upstream interface with MEMS microphones
+// Upstream I2S interface with mics
 // ------------------------------------------------------------------
 
 // MIC_SCK
@@ -138,7 +138,7 @@ always_comb
   else     m_sd_i = MIC_SD;   // Mics (real data) or ext loopback (test pat)
 
 // ------------------------------------------------------------------
-// Downstream interface with Raspberry Pi 5
+// Downstream I2S interface with Pi
 // ------------------------------------------------------------------
 
 // PI_SCK
@@ -166,6 +166,10 @@ always_ff @(posedge clk)
   if      ( tdm && p_fall) PI_SD <= p_sd_o;
   else if (!tdm && m_fall) PI_SD <= m_sd_i[msel];
 
+// ------------------------------------------------------------------
+// Alignment control GPIO from Pi
+// ------------------------------------------------------------------
+
 // PI_ALN
 // Input synchronizer and source combiner with CR bit
 // Update in middle of frame (MIC_WS 1->0) to ensure timing
@@ -177,14 +181,41 @@ always_ff @(posedge clk) begin
     p_aln_i <= aln_sync[0] || aln;
 end
 
+// ------------------------------------------------------------------
+// I2C target interface with Pi
+// ------------------------------------------------------------------
+
+// Note: I2C inputs require a gltich filter to suppress signal integrity
+// artifacts and noise spikes up to 50ns wide. The filter can be analog
+// (e.g. RC filter plus Schmitt trigger) or digital, as implemented here.
+
+// Number of cycles to filter, based on peak core clock rate (see clkgen)
+localparam int FLT = (M ==  4) ? 3 :  //  8 mics, 116ns at 25.8MHz
+                     (M == 12) ? 4 :  // 24 mics, ~50ns at 85.0MHz
+                                 0;   // Unsupported
+
 // PI_SDA
 // Bidirectional with open drain driver
-assign p_sda_i = PI_SDA;
-assign PI_SDA  = p_sda_o ? 1'bz : 1'b0;
+// Input synchronization and glitch filter
+logic [FLT-1:0] dly_sda;
+initial p_sda_i = 0;
+always_ff @(posedge clk) begin
+  dly_sda <= {PI_SDA, dly_sda[FLT-1:1]};
+  if      (dly_sda == '1) p_sda_i <= 1;
+  else if (dly_sda == '0) p_sda_i <= 0;
+end
+assign PI_SDA = p_sda_o ? 1'bz : 1'b0;
 
 // PI_SCL
-// Input only (I2C target, no clock stretch)
-assign p_scl_i = PI_SCL;
+// Operatings as input only (I2C target, no clock stretch)
+// Input synchronization and glitch filter
+logic [FLT-1:0] dly_scl;
+initial p_scl_i = 0;
+always_ff @(posedge clk) begin
+  dly_scl <= {PI_SCL, dly_scl[FLT-1:1]};
+  if      (dly_scl == '1) p_scl_i <= 1;
+  else if (dly_scl == '0) p_scl_i <= 0;
+end
 
 // ------------------------------------------------------------------
 
