@@ -42,15 +42,7 @@ always_ff @(posedge SCK)
 wire logic eof = !wsq && WS && (id == 0 || id == M || ptype == 3);
 
 // LSFR per mic, seeded to match PRBS generators in mic models
-(* ram_style = "logic", mem2reg *)
 logic [30:0] next_plfsr_L [1:M], plfsr_L [1:M], next_plfsr_R [1:M], plfsr_R [1:M];
-initial
-  for (int i = 1; i <= M; i++) begin
-    plfsr_L[i] = i << 0 | 0 << 12 | i << 16;
-    plfsr_R[i] = i << 0 | 1 << 12 | i << 16;
-    next_plfsr_L[i] = plfsr_L[i];
-    next_plfsr_R[i] = plfsr_R[i];
-  end
 
 // FSM logic
 always_comb begin
@@ -78,7 +70,13 @@ always_comb begin
     case (pstate)
 
       STOP: begin
+        // Special ID value during frame alignment
         next_id = 0;
+        // Reinitialize LFSRs
+        for (int i = 1; i <= M; i++) begin
+          next_plfsr_L[i] = i << 0 | 0 << 12 | i << 16;
+          next_plfsr_R[i] = i << 0 | 1 << 12 | i << 16;
+        end
         // Skip alignment for Mux mode
         if (ptype == 3)
           next_pstate = RUN;
