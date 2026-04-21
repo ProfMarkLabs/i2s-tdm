@@ -43,7 +43,8 @@ typedef enum logic [1:0] {
 var state_t next_state, state = RUN;
 
 // Input and output data shifter
-(* ram_style = "logic", mem2reg *) var logic [32*2-1:0] next_sdi[1:M], sdi[1:M];
+(* ram_style = "logic", mem2reg *)
+var logic [32*2-1:0] next_sdi[1:M], sdi[1:M];
 var logic [32*2*M-1:0] next_sdo, sdo;
 
 // ------------------------------------------------------------------
@@ -56,52 +57,53 @@ always_comb begin
   next_sof   = sof;
   next_state = state;
   next_sdo   = sdo;
-  for (int i = 1; i <= M; i++) next_sdi[i] = sdi[i];
+  for (int i = 1; i <= M; i++)
+    next_sdi[i] = sdi[i];
 
   // Mic bit counter (mcnt)
   // 64-bit repeating downcounter, clock on falling edge
-  if (m_fall) begin
+  if (m_fall)
     if (mcnt == 0) next_mcnt = '1;
-    else next_mcnt = mcnt - 1;
-  end
-
+    else           next_mcnt = mcnt - 1;
+  
   // Word select to mics
   // Value based on bit counter
-  if (mcnt >= 34) m_ws_o = 1;
-  else if (mcnt <= 1) m_ws_o = 1;
-  else m_ws_o = 0;
+  if      (mcnt >= 34) m_ws_o = 1;
+  else if (mcnt <=  1) m_ws_o = 1;
+  else                 m_ws_o = 0;
 
   // Start of frame (SOF) indicator
   // Note: Cleared in logic below
-  if (m_rise && mcnt == 0) next_sof = '1;
+  if (m_rise && mcnt == 0)
+    next_sof = '1;
 
   // Input data shifters from mics (sdi)
   // Clock on risng edge, MSB <- LSB, invalidate at SOF
   if (m_rise)
     for (int i = 1; i <= M; i++)
-    if (sof) next_sdi[i] = {{63{1'bx}}, m_sd_i[i]};
-    else next_sdi[i] = {sdi[i][62:0], m_sd_i[i]};
+      if (sof) next_sdi[i] = {{63{1'bx}}, m_sd_i[i]};
+      else     next_sdi[i] = {sdi[i][62:0], m_sd_i[i]};
 
   // Pi bit counter (pcnt)
   // 64-bit repeating downcounter, clock on falling edge
   if (p_fall)
     if (pcnt == 0) next_pcnt = '1;
-    else next_pcnt = pcnt - 1;
+    else           next_pcnt = pcnt - 1;
 
   // Word select to Pi
   // Value based on bit counter
-  if (pcnt >= 34) p_ws_o = 1;
-  else if (pcnt <= 1) p_ws_o = 1;
-  else p_ws_o = 0;
+  if      (pcnt >= 34) p_ws_o = 1;
+  else if (pcnt <=  1) p_ws_o = 1;
+  else                 p_ws_o = 0;
 
   // Output data shifter to Pi
   // Clock on falling edge, MSB-first, invalidate input for simulation
   if (p_fall) next_sdo = {sdo[254:0], 1'bx};
-  p_sd_o = sdo[255];
+    p_sd_o = sdo[255];
 
   // Process start of frame
   if (p_rise && sof) begin
-    next_sof  = 0;  // Clear flag
+    next_sof  =  0;  // Clear flag
     next_pcnt = '0;  // Force counter state
 
     // Frame alignment state machine
@@ -110,7 +112,8 @@ always_comb begin
       STOP: begin
         // Continuous frames with all zeros
         next_sdo = '0;
-        if (!p_aln_i) next_state = SYNC;
+        if (!p_aln_i)
+          next_state = SYNC;
       end
 
       SYNC: begin
@@ -146,7 +149,7 @@ always_ff @(posedge clk) begin
   sof   <= next_sof;
   state <= next_state;
   for (int i = 1; i <= M; i++) sdi[i] <= next_sdi[i];
-  sdo <= next_sdo;
+    sdo <= next_sdo;
 end
 
 endmodule

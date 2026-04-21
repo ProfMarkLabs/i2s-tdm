@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Tue Apr 21 15:45:11 2026
+[*] Tue Apr 21 16:32:39 2026
 [*]
 [dumpfile] "C:\Users\c33107\OneDrive - University of Ottawa\Projects\Capstone-BF-CNN\i2s-tdm\fpga\_build\tdm8\main_tb.vcd"
-[dumpfile_mtime] "Tue Apr 21 15:40:46 2026"
-[dumpfile_size] 120260215
+[dumpfile_mtime] "Tue Apr 21 16:32:05 2026"
+[dumpfile_size] 120126938
 [savefile] "C:\Users\c33107\OneDrive - University of Ottawa\Projects\Capstone-BF-CNN\i2s-tdm\fpga\main_tb.gtkw"
-[timestart] 49000000
+[timestart] 0
 [size] 1920 1082
 [pos] -1 -1
-*-29.263571 330300000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-29.563570 330300000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] testbench.
 [treeopen] testbench.dut.
 [treeopen] testbench.dut.tstgen.
@@ -18,10 +18,9 @@
 [signals_width] 264
 [sst_expanded] 1
 [sst_vpaned_height] 350
-@25
-testbench.monerr
 @24
-testbench.pi.chkerr[31:0]
+testbench.monerr
+testbench.pi.chkerr
 @200
 >728000
 -tstgen
