@@ -1,5 +1,5 @@
 // Mini I2C client
-// Single 8-bit write-only control register
+// Single 8-bit WRITE-ONLY control register
 // Note: See ioports for synchronization and glitch filter
 
 // SPDX-FileCopyrightText: (C) 2026 Mark Warriner
@@ -40,7 +40,7 @@ initial ctrl = DEF;        // Control register default value in FPGA bitstream
 
 // Pulse width for stop guaranteed by asynchronous handshake
 // Reset recovery/removal guaranteed by I2C timing specifications
-// REUSE NOTE: This logic does not support repeated START condition (Sr)
+// Note: Yosys logic loop warning for stop and active can be safely ignored
 
 always_ff @(negedge sda or posedge stop)
 if      (stop) active <= 0;
@@ -100,8 +100,6 @@ always_ff @(posedge scl or negedge active)
 // ------------------------------------------------------------------
 
 // Drive ACK bit on SDA (open-drain)
-// REUSE NOTE: This logic does not support READ data output
-
 initial         p_sda_o  = 1;  // High-Z on FPGA config
 always_ff @(negedge scl or negedge active)
   if  (!active) p_sda_o <= 1;  // High-Z while idle
