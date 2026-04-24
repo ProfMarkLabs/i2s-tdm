@@ -1,5 +1,6 @@
 // FPGA testbench
 
+// SPDX-DocumentNamespace: https://github.com/ProfMarkLabs/i2s-tdm
 // SPDX-FileCopyrightText: (C) 2026 Mark Warriner
 // SPDX-License-Identifier: 0BSD
 
@@ -102,7 +103,7 @@ initial begin
   ptype = 0;  // Disabled
   PI_ALN = 1;
   WriteControlRegister(8'h00);  // ilb=0 tpat=0 msel=0 (tdm=1)
-  wait (dut.tdm.state == dut.tdm.STOP);  // or > 20.8us delay
+  wait (dut.tdm.r_state == dut.tdm.STOP);  // or > 20.8us delay
   ptype = 1;  // TDM with PRBS-31
   PI_ALN = 0;
 
@@ -118,7 +119,7 @@ initial begin
 
   ptype = 0;  // Disabled
   WriteControlRegister(8'h90);  // aln=1 ilb=0 tpat=1 msel=0 (tdm=1)
-  wait (dut.tdm.state == dut.tdm.STOP);  // or > 20.8us delay
+  wait (dut.tdm.r_state == dut.tdm.STOP);  // or > 20.8us delay
   ptype = 2;  // TDM with tagged frames
   WriteControlRegister(8'h10);  // aln=0
 
@@ -156,7 +157,7 @@ initial begin
   ptype = 0;  // Disabled
   PI_ALN = 1;
   WriteControlRegister(8'h50);  // ilb=1 tpat=1 msel=0 (tdm=1)
-  wait (dut.tdm.state == dut.tdm.STOP);  // or > 20.8us delay
+  wait (dut.tdm.r_state == dut.tdm.STOP);  // or > 20.8us delay
   ptype = 2;  // TDM with tagged frames
   PI_ALN = 0;
 
@@ -224,17 +225,17 @@ for (genvar i = 1; i <= M; i++) begin : sigmon
 
   // Input data shifter
   always begin
-    @(posedge dut.tdm.sof);  // Input shift complete
+    @(posedge dut.tdm.r_sof);  // Input shift complete
     @(negedge dut.clk);
     sdi = sdi_new;  // 1 frame delay
-    sdi_new = dut.tdm.sdi[i];
+    sdi_new = dut.tdm.sdi[64*(M-i) +:64];
     if (ptype == 3)
       sdi  = sdi_new;  // Reduced pipeline latency in Mux mode
   end
 
   // Output data shifter
   always begin
-    @(negedge dut.tdm.sof);  // Parallel load complete
+    @(negedge dut.tdm.r_sof);  // Parallel load complete
     @(negedge dut.clk);
     sdo = sdo_new;  // 1 frame delay
     sdo_new = dut.tdm.sdo[64*(M-i) +:64];
@@ -243,14 +244,14 @@ for (genvar i = 1; i <= M; i++) begin : sigmon
 
     // Check output framing of TDM aggregator
     if (dut.tstgen.tcnt > 1)
-      assert (dut.tdm.pcnt === '0 && PI_WS === 0)
+      assert (dut.tdm.r_pcnt === '0 && PI_WS === 0)
         else $error("monerr=%0d i=%0d pcnt=%0d (exp %0d) PI_WS=%0b (exp %0b)",
-                   ++monerr,    i,    dut.tdm.pcnt, 0,   PI_WS, 0);
+                   ++monerr,    i,    dut.tdm.r_pcnt, 0, PI_WS, 0);
   end
 
   // Pi checker
   always begin
-    @(posedge dut.tdm.sof);  // Input shift complete
+    @(posedge dut.tdm.r_sof);  // Input shift complete
     @(negedge pi.eof);       // Received end of frame
     @(negedge pi.SCK);
     psdi = pi.psdi[64*(M-i) +:64];

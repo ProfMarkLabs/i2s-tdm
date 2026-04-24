@@ -1,155 +1,171 @@
 // I2S TDM Aggregator
-
+// ------------------------------------------------------------------
+// SPDX-DocumentNamespace: https://github.com/ProfMarkLabs/i2s-tdm
 // SPDX-FileCopyrightText: (C) 2026 Mark Warriner
 // SPDX-License-Identifier: 0BSD
+// ------------------------------------------------------------------
+// FEATURES
+//
+//  * Aggregates multiple stereo PCM interfaces into a single TDM stream
+//  * Architecture: store-and-forward, gapless (no speed-up)
+//  * Offline in-band frame alignment, triggered by an external signal
+//  * Fully synchronous design: common core clock with clock enable pulses
+//  * All outputs combinational (registered in ioports module)
+//
+//   Clock rate ratio:         MIC_SCK (1) :  clk (2M) : PI_CLK (M)
+//   e.g. M=4 PCM=2*32 @ 48kHz    3.072MHz : 24.576MHz : 12.288MHz
+//
+// EXAMPLE APPLICATION
+//
+// +-----------+  M x 2ch PCM   +---TDM Aggregator FPGA---+ 1 x TDM  +------+
+// | Mic Array |<----MIC_SCK----|                         |--PI_SCK->| Rasp |
+// | (M pairs) |<----MIC_WS-----|   M Input     Output    |--PI_WS-->| Pi 5 |
+// |           |==MIC_SD[1:M]==>|=> Shifters => Shifter ->|--PI_SD-->| SBC  |
+// +-----------+                +-------------------------+          +------+
+//         clock                clock                 clock          clock
+//      consumer                producer           producer          consumer
+// ------------------------------------------------------------------
 
 module tdm #(
-
-    parameter int M  // Number of mic pairs
-
+  parameter int M,            // Number of mic pairs
+  parameter int PCM = 2 * 32  // Stereo PCM frame size in bits
 ) (
+  input logic        clk,     // Core clock
+  input logic        rst,     // Synchronous reset
 
-    input logic clk,  // FPGA core clock
-    input logic rst,  // Synchronous reset, not currently used
+  // Upstream I2S interface with mics
+  input  logic       m_rise,  // MIC_SCK: Clock enable pulses
+  input  logic       m_fall,
+  output logic       m_ws_o,  // MIC_WS: Word select to mics
+  input  logic [1:M] m_sd_i,  // MIC_SD[1:M]: M-lane PCM data from mics
 
-    // Upstream Mic interface
-    input  logic       m_rise,  // I2S clock enable pulses
-    input  logic       m_fall,
-    output logic       m_ws_o,  // I2S word select to mics
-    input  logic [1:M] m_sd_i,  // I2S multi-lane data from mics
+  // Downstream I2S interface with Pi (runs M times faster)
+  input  logic       p_rise,  // PI_SCK: Clock enable pulses
+  input  logic       p_fall,
+  output logic       p_ws_o,  // PI_WS: Word select to Pi
+  output logic       p_sd_o,  // PI_SD: TDM data to Pi
 
-    // Downstream Pi interface
-    input  logic p_rise,  // I2S clock enable pulses
-    input  logic p_fall,
-    output logic p_ws_o,  // I2S word select to Pi
-    output logic p_sd_o,  // I2S TDM data to Pi
-    input  logic p_aln_i  // Alignment control from Pi
-
+  input  logic       p_aln_i  // Alignment control from Pi
 );
 
 // ------------------------------------------------------------------
-
-// Bit counters for 2 x 32-bit PCM words
-var logic [5:0] next_mcnt, mcnt = 32;  // Mic interface
-var logic [5:0] next_pcnt, pcnt = 32;  // Pi  interface
-var logic next_sof, sof = 0;  // Start of frame (SOF) flag
-
-// Finite state machine, state updated on SOF
-typedef enum logic [1:0] {
-  STOP,
-  SYNC,
-  RUN
-} state_t;
-var state_t next_state, state = RUN;
-
-// Input and output data shifter
-(* ram_style = "logic", mem2reg *)
-var logic [32*2-1:0] next_sdi[1:M], sdi[1:M];
-var logic [32*2*M-1:0] next_sdo, sdo;
-
+// Control logic
 // ------------------------------------------------------------------
 
+typedef logic [$clog2(PCM)-1:0] cnt_t;                 // Bit counter for WS
+typedef enum logic [1:0] { STOP, SYNC, RUN } state_t;  // Frame alignment FSM
+
+// registered value (r), next value (n)
+// Note: Due to a simulator limitation, we cannot use a struct here
+var cnt_t   r_mcnt,  n_mcnt;   // Mic bit counter
+var cnt_t   r_pcnt,  n_pcnt;   // Pi  bit counter (runs M times faster)
+var logic   r_sof,   n_sof;    // Flag for start of frame (SOF)
+var state_t r_state, n_state;  // FSM state, updated on SOF
+
+// Register update logic
+always_ff @(posedge clk)
+  if (rst) begin
+    r_mcnt  <= PCM / 2;  // Ensure deterministic start for all mics
+    r_pcnt  <= PCM / 2;
+    r_sof   <= 0;
+    r_state <= RUN;  // Frame alignment must be specifically requested
+  end
+  else begin
+    r_mcnt  <= n_mcnt;
+    r_pcnt  <= n_pcnt;
+    r_sof   <= n_sof;
+    r_state <= n_state;
+  end
+
+// Determine next state of I2S Word Select (WS)
+// Note: WS leads by 2 cycles to keep data aligned to the frame boundary
+function bit LeftRight(input cnt_t cnt);
+  LeftRight = (cnt >= 2 && cnt < PCM / 2 + 2);  // 0:Left 1:Right
+endfunction
+
+// Next value logic
 always_comb begin
+  // Keep registered values by default
+  n_mcnt  = r_mcnt;
+  n_pcnt  = r_pcnt;
+  n_sof   = r_sof;
+  n_state = r_state;
 
-  // Defaults
-  next_mcnt  = mcnt;
-  next_pcnt  = pcnt;
-  next_sof   = sof;
-  next_state = state;
-  next_sdo   = sdo;
-  for (int i = 1; i <= M; i++)
-    next_sdi[i] = sdi[i];
-
-  // Mic bit counter (mcnt)
-  // 64-bit repeating downcounter, clock on falling edge
+  // Mic bit counter (mcnt) and word select (MIC_WS)
+  //  - 64-bit repeating downcounter on MIC_SCK falling edge
+  //  - Output based on counter value, registered in ioports module
   if (m_fall)
-    if (mcnt == 0) next_mcnt = '1;
-    else           next_mcnt = mcnt - 1;
-  
-  // Word select to mics
-  // Value based on bit counter
-  if      (mcnt >= 34) m_ws_o = 0;
-  else if (mcnt <=  1) m_ws_o = 0;
-  else                 m_ws_o = 1;
+    if (r_mcnt == 0) n_mcnt = PCM - 1;
+    else             n_mcnt--;
+  m_ws_o = LeftRight(r_mcnt);
 
-  // Start of frame (SOF) indicator
-  // Note: Cleared in logic below
-  if (m_rise && mcnt == 0)
-    next_sof = '1;
-
-  // Input data shifters from mics (sdi)
-  // Clock on risng edge, MSB <- LSB, invalidate at SOF
-  if (m_rise)
-    for (int i = 1; i <= M; i++)
-      if (sof) next_sdi[i] = {{63{1'bx}}, m_sd_i[i]};
-      else     next_sdi[i] = {sdi[i][62:0], m_sd_i[i]};
-
-  // Pi bit counter (pcnt)
-  // 64-bit repeating downcounter, clock on falling edge
+  // Pi bit counter (pcnt) and word select (PI_WS)
+  //  - 64-bit repeating downcounter on PI_SCK falling edge
+  //  - Output based on counter value, registered in ioports module
   if (p_fall)
-    if (pcnt == 0) next_pcnt = '1;
-    else           next_pcnt = pcnt - 1;
+    if (r_pcnt == 0) n_pcnt = PCM - 1;
+    else             n_pcnt--;
+  p_ws_o = LeftRight(r_pcnt);
 
-  // Word select to Pi
-  // Value based on bit counter
-  if      (pcnt >= 34) p_ws_o = 0;
-  else if (pcnt <=  1) p_ws_o = 0;
-  else                 p_ws_o = 1;
+  // Start of frame (SOF) flag
+  //  - Handshake between input and output shifters (sdi -> sdo)
+  //  - Raise flag when mic domain finishes a PCM data frame
+  //  - Lower flag when Pi domain acknowledges the frame boundary (see below)
+  if (m_rise && r_mcnt == 0)
+    n_sof = 1;  // Raise flag
 
-  // Output data shifter to Pi
-  // Clock on falling edge, MSB-first, invalidate input for simulation
-  if (p_fall) next_sdo = {sdo[254:0], 1'bx};
-    p_sd_o = sdo[255];
+  // Alignment state machine (STOP -> SYNC -> RUN)
+  //  - Controls pattern delivered to the Pi during frame alignment
+  //  - Transitions occur on frame boundaries (SOF) only
+  //  - See also: output shifter (sdo) in datapath logic below
+  if (p_rise && r_sof) begin
+    n_sof  =  0;  // Lower flag
+    n_pcnt = '0;  // Force counter state (only needed first time)
 
-  // Process start of frame
-  if (p_rise && sof) begin
-    next_sof  =  0;  // Clear flag
-    next_pcnt = '0;  // Force counter state
-
-    // Frame alignment state machine
-    case (state)
-
-      STOP: begin
-        // Continuous frames with all zeros
-        next_sdo = '0;
-        if (!p_aln_i)
-          next_state = SYNC;
-      end
-
-      SYNC: begin
-        // Single frame with all ones
-        next_sdo   = '1;
-        next_state = RUN;
-      end
-
-      RUN: begin
-        // Regular data frame, parallel load from input shifters
-        for (int i = 1; i <= M; i++)
-          next_sdo[64*(M-i) +:64] = sdi[i];
-
-        // Check for new alignment request
-        if (p_aln_i) begin
-          next_sdo   = '0;
-          next_state = STOP;
-        end
-      end
-
-      default: begin
-        next_sdo   = '0;
-        next_state = STOP;
-      end
+    case (r_state)  // PI_ALN or aln=ctrl[7]
+      STOP : if (!p_aln_i) n_state = SYNC;  // 1 : Continuous frames of all 0s
+      SYNC :               n_state = RUN;   // 1->0 : Single frame of all 1s
+      RUN  : if ( p_aln_i) n_state = STOP;  // 0 : Regular TDM data frames
     endcase
   end
 end
 
-// Synchronous updates
-always_ff @(posedge clk) begin
-  mcnt  <= next_mcnt;
-  pcnt  <= next_pcnt;
-  sof   <= next_sof;
-  state <= next_state;
-  for (int i = 1; i <= M; i++) sdi[i] <= next_sdi[i];
-    sdo <= next_sdo;
-end
+// ------------------------------------------------------------------
+// Datapath logic
+// ------------------------------------------------------------------
+
+typedef logic [M*PCM-1:0] frame_t;  // M PCM frames = 1 TDM frame
+var frame_t sdi, sdo;
+
+// Input PCM data shifters (MIC_SD[1:M] -> sdi)
+//  - M shift registers, each capturing one PCM frame from a mic pair
+//  - Shift on MIC_SCK rising edge, MSB-first (shift into LSB)
+//  - Invalidate the headspace (not-yet-filled portion) at SOF for simulation
+always_ff @(posedge clk)
+  if (m_rise)
+    for (int b = 0; b < M * PCM; b++)
+      if (b % PCM == 0) sdi[b] <= m_sd_i[M-b/PCM];  // Shift in (from mics)
+      else if   (r_sof) sdi[b] <= 'x;               // Invalidate (sim only)
+      else              sdi[b] <= sdi[b-1];         // Shift along
+
+// Output TDM data shifter (sdo -> PI_SD)
+//  - Single shift register to send combined TDM frame to the Pi
+//  - Parallel load on SOF, based on alignment state
+//  - Shift on falling edge, MSB-first (shift out of MSB)
+//  - Invalidate the tail (newly-emptied portion) on each shift for simulation
+//  - Output PI_SD from shifter MSB, registered in ioports module
+always_ff @(posedge clk)
+  if (p_rise && r_sof)
+    case (r_state)       // Parallel load:
+      STOP: sdo <= '0;   // Continuous frames of all 0s
+      SYNC: sdo <= '1;   // Single frame of all 1s
+      RUN:  sdo <= sdi;  // Regular TDM data frames
+    endcase
+  else if (p_fall)
+    sdo <= {sdo[M*PCM-2:0], 1'bx};  // Shift along and invalidate (sim only)
+
+assign p_sd_o = sdo[M*PCM-1];  // Output (to Pi)
+
+// ------------------------------------------------------------------
 
 endmodule

@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Tue Apr 21 16:32:39 2026
+[*] Fri Apr 24 00:14:20 2026
 [*]
 [dumpfile] "C:\Users\c33107\OneDrive - University of Ottawa\Projects\Capstone-BF-CNN\i2s-tdm\fpga\_build\tdm8\main_tb.vcd"
-[dumpfile_mtime] "Tue Apr 21 16:32:05 2026"
-[dumpfile_size] 120126938
+[dumpfile_mtime] "Fri Apr 24 00:10:08 2026"
+[dumpfile_size] 106955610
 [savefile] "C:\Users\c33107\OneDrive - University of Ottawa\Projects\Capstone-BF-CNN\i2s-tdm\fpga\main_tb.gtkw"
-[timestart] 0
+[timestart] 1212140000
 [size] 1920 1082
 [pos] -1 -1
-*-29.563570 330300000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-22.363827 490837260 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] testbench.
 [treeopen] testbench.dut.
 [treeopen] testbench.dut.tstgen.
@@ -35,9 +35,6 @@ testbench.sigmon[1].tsdo[63:0]
 testbench.sigmon[2].tsdo[63:0]
 testbench.sigmon[3].tsdo[63:0]
 testbench.sigmon[4].tsdo[63:0]
-@28
-testbench.dut.tstgen.sck
-testbench.dut.tstgen.ws
 @200
 -tdm
 @22
@@ -114,24 +111,19 @@ testbench.sigmon[3].sdi[63:0]
 -group_end
 @22
 testbench.sigmon[4].sdi[63:0]
-@8024
-testbench.dut.tdm.mcnt[5:0]
+testbench.dut.tdm.r_mcnt[5:0]
 @28
 testbench.dut.MIC_SCK
 testbench.dut.MIC_WS
-@22
-testbench.dut.m_sd_i[1:4]
-@28
-testbench.dut.tdm.sof
+testbench.dut.tdm.r_sof
 @22
 testbench.sigmon[1].sdo[63:0]
 testbench.sigmon[2].sdo[63:0]
 testbench.sigmon[3].sdo[63:0]
 testbench.sigmon[4].sdo[63:0]
-@24
-testbench.dut.tdm.pcnt[5:0]
+testbench.dut.tdm.r_pcnt[5:0]
 @28
-testbench.dut.tdm.state[1:0]
+testbench.dut.tdm.r_state[1:0]
 testbench.dut.PI_SCK
 testbench.dut.PI_SD
 testbench.dut.PI_WS
