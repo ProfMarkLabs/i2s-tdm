@@ -2,6 +2,7 @@
 // PRBS-31 or Tagged Frames
 // Works with internal/external loopback and TDM/Mux mode
 
+// SPDX-DocumentNamespace: https://github.com/ProfMarkLabs/i2s-tdm
 // SPDX-FileCopyrightText: (C) 2026 Mark Warriner
 // SPDX-License-Identifier: 0BSD
 

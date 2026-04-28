@@ -2,6 +2,7 @@
 // Single 8-bit WRITE-ONLY control register
 // Note: See ioports for synchronization and glitch filter
 
+// SPDX-DocumentNamespace: https://github.com/ProfMarkLabs/i2s-tdm
 // SPDX-FileCopyrightText: (C) 2026 Mark Warriner
 // SPDX-License-Identifier: 0BSD
 

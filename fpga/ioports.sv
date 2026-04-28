@@ -1,6 +1,7 @@
 // Logic for Input/Output Ports
 // Output registers, input synchronization, test mode muxes, tristate logic
 
+// SPDX-DocumentNamespace: https://github.com/ProfMarkLabs/i2s-tdm
 // SPDX-FileCopyrightText: (C) 2026 Mark Warriner
 // SPDX-License-Identifier: 0BSD
 
