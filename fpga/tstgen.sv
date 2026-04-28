@@ -25,7 +25,7 @@ wire logic aln  = p_aln_i;  // Alignment control
 
 wire logic sck = m_sck_li;  // I2S clock
 
-// I2S word select and end of frame (EOF) detection
+// I2S word select (WS) and end of frame (EOF) detection
 wire logic ws = m_ws_li;
 var  logic wsq;
 always @(posedge sck)
@@ -43,61 +43,61 @@ always @(posedge sck)
   if (eof) tcnt <= 16'(tcnt + 1);
 
 generate
-for (genvar i = 1; i <= M; i++) begin : mic
+for (genvar i = 1; i <= M; i++) begin : pair
+  for (genvar j = 0; j <= 1; j++) begin : chan
 
-  // TODO: Use bitwise implementation to reduce logic utilization
+    // TODO: Use bitwise implementation to reduce logic utilization
 
-  // Output shifter and LFSR (left and right channels)
-  var logic [63:0] next_tsdo, tsdo;
-  var logic [30:0] next_tlfsr_L, tlfsr_L, next_tlfsr_R, tlfsr_R;
+    // Output shifter and LFSR
+    var logic [31:0] next_tsdo,  tsdo;
+    var logic [30:0] next_tlfsr, tlfsr;
 
-  always_comb begin
-    // Defaults
-    next_tsdo = tsdo;
-    next_tlfsr_L = tlfsr_L;
-    next_tlfsr_R = tlfsr_R;
+    always_comb begin
+      // Defaults
+      next_tsdo  = tsdo;
+      next_tlfsr = tlfsr;
 
-    if (eof) begin
-      if (init) begin
-        // Reinitialize registers for frame re-alignment
-        // Invalidate data for simulation
-        next_tsdo[i] = 'x;
-        next_tlfsr_L = 31'(i << 0 | 0 << 12 | i << 16);
-        next_tlfsr_R = 31'(i << 0 | 1 << 12 | i << 16);
+      if (eof) begin
+        if (init) begin
+          // Reinitialize registers for frame re-alignment
+          // Invalidate data for simulation
+          next_tsdo  = 'x;
+          next_tlfsr = 31'(i << 0 | j << 12 | i << 16);
+        end
+
+        else
+          // Load shifter for start of next frame based on selected test pattern
+          case (tpat)
+            0: // PRBS-31
+              for (int k = 31; k >= 0; k--) begin
+                next_tsdo[k] = next_tlfsr[30];
+                next_tlfsr = {next_tlfsr[29:0], next_tlfsr[30] ^ next_tlfsr[27]};
+              end
+
+            1: // Tagged Frames
+              next_tsdo = {8'(i), j ? 8'hBB : 8'hAA, 16'(tcnt)};
+
+          endcase
       end
-
-      else
-        // Load shifter for start of next frame based on selected test pattern
-        case (tpat)
-          0: // PRBS-31
-            for (int k = 31; k >= 0; k--) begin
-              next_tsdo[32+k] = next_tlfsr_L[30];
-              next_tsdo[ 0+k] = next_tlfsr_R[30];
-              next_tlfsr_L = {next_tlfsr_L[29:0], next_tlfsr_L[30] ^ next_tlfsr_L[27]};
-              next_tlfsr_R = {next_tlfsr_R[29:0], next_tlfsr_R[30] ^ next_tlfsr_R[27]};
-            end
-
-          1: // Tagged Frames
-            next_tsdo = {8'(i), 8'hAA, 16'(tcnt), 8'(i), 8'hBB, 16'(tcnt)};
-        endcase
+      else if (j == wsq)
+        // Output shifter with intentional invalidation to catch alignment bugs
+        next_tsdo = {tsdo[30:0], 1'bx};
     end
-    else
-      // Output shifter with intentional invalidation to catch alignment bugs
-      next_tsdo = {tsdo[62:0], 1'bx};
-  end
 
-  // Register updates
-  // Note: No reset, relies on initial values above
-  always_ff @(posedge sck) begin
-    tsdo    <= next_tsdo;
-    tlfsr_L <= next_tlfsr_L;
-    tlfsr_R <= next_tlfsr_R;
-  end
+    // Register updates
+    // Note: No reset, relies on initial values above
+    always_ff @(posedge sck) begin
+      tsdo  <= next_tsdo;
+      tlfsr <= next_tlfsr;
+    end
+
+  end : chan
 
   // Data output, MSB-first
-  assign m_sd_lo[i] = next_tsdo[63];
+  assign m_sd_lo[i] = ws ? chan[1].next_tsdo[31]   // Right channel
+                         : chan[0].next_tsdo[31];  // Left channel
 
-end
+end : pair
 endgenerate
 
 endmodule

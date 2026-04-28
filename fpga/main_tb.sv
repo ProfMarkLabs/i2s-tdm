@@ -218,7 +218,8 @@ for (genvar i = 1; i <= M; i++) begin : sigmon
     @(negedge dut.tstgen.sck);
     tsdo = tsdo_new;        // 2 frame delay
     tsdo_new = tsdo_newer;  // 1 frame delay
-    tsdo_newer = dut.tstgen.mic[i].tsdo;
+    tsdo_newer[63:32] = dut.tstgen.pair[i].chan[0].tsdo;  // Left channel
+    tsdo_newer[31: 0] = dut.tstgen.pair[i].chan[1].tsdo;  // Right channel
     if (ptype == 3)
       tsdo = tsdo_new;  // Reduced pipeline latency in Mux mode
   end
