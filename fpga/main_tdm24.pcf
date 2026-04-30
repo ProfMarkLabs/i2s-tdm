@@ -7,7 +7,8 @@
 
 # Clocks
 set_io REFCLK      P7  # input  - 12MHz reference clock
-set_io CORECLK     P9  # output - Constaint hack and test point
+set_io CORECLK     P9  # output - Test point and constaint workaround
+set_io CORERST     M9  # output - Test point
 
 # Upstream interface with MEMS microphones
 set_io MIC_SCK    H12  # output - I2S clock to mics via buffer

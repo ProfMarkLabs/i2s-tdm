@@ -16,14 +16,16 @@ var int monerr = 0;  // Monitor error count
 // Device under test (DUT)
 // ------------------------------------------------------------------
 
-// Number of mic pairs
+// Number of mic pairs and PCM frame size
 localparam int M = `ifdef TDM8    4
                    `elsif TDM24  12
                    `endif ;
+localparam int PCM = 2*32;
 
 // Reference clock
 var  logic REFCLK;
 wire logic CORECLK;
+wire logic CORERST;
 
 // Mic interface
 wire logic MIC_SCK;
@@ -92,7 +94,13 @@ pi_emu #(.M(M)) pi (.ptype, .SCK(PI_SCK), .WS(PI_WS), .SD(PI_SD));
 initial begin
   $dumpvars(0, testbench);
 
+  $display;
+  ClockConfig;
+  #0;
+  TestSummary;
+
   ///////////////////////////////////////////////////////////////////////////
+  $display;
   $info("TEST #1: TDM with PRBS-31 (external loopback)");
 
   // Here we configure the generator (DUT) and checker (Pi model) for
@@ -111,6 +119,7 @@ initial begin
   TestSummary;
 
   ///////////////////////////////////////////////////////////////////////////
+  $display;
   $info("TEST #2: TDM with tagged frames (external loopback)");
 
   // Here we reconfigure the generator (DUT) and checker (Pi model) to use a
@@ -127,6 +136,7 @@ initial begin
   TestSummary;
 
   ///////////////////////////////////////////////////////////////////////////
+  $display;
   $info("TEST #3: Mux with tagged frames (external loopback)");
 
   // Here we reconfigure the DUT as an I2S multiplexor where, instead of
@@ -148,6 +158,7 @@ initial begin
   end
 
   ///////////////////////////////////////////////////////////////////////////
+  $display;  
   $info("TEST #4: TDM with tagged frames (internal loopback)");
 
   // We return to TDM aggregation, this time with internal loopback path. We
@@ -177,7 +188,7 @@ end
 
 // Summary at the end of each test with configuration and error counts
 task TestSummary;
-  assert (pi.r_pstate === pi.RUN)
+  assert (pi.r_pstate === pi.RUN || $time == 0)
     else $error("monerr=%0d : Checker did not reach RUN state!", ++monerr);
   $display("msel=%0d tpat=%0d ilb=%0b tcnt=%0d monerr=%0d chkerr=%0d",
            dut.ioports.msel, dut.tstgen.tpat, dut.ioports.ilb,
@@ -195,6 +206,63 @@ final begin
                                       pi.r_chkerr, pi.r_chkerr == 1 ? "" : "s");
   assert (result) $info (summary);
     else          $error(summary);
+end
+
+// ------------------------------------------------------------------
+// Clock Generator configuration checks
+// ------------------------------------------------------------------
+
+`define CG dut.clkgen
+
+// Clock frequencies in MHz
+const real
+  f_REF  = 12.0,                          // Reference clock (REFCLK)
+  f_PFD  = f_REF / (`CG.DIVR+1),          // Phase-frequency detector (PFD) inputs
+  f_VCO  = f_PFD * (`CG.DIVF+1),          // Voltage-controlled oscillator (VCO) output
+  f_OUT  = f_VCO / (2**`CG.DIVQ),         // Phase-locked loop (PLL) macro output (pll_clk)
+  f_CORE = 2 * `CG.M * f_OUT / `CG.DCNT,  // Core clock (CORECLK and clk)
+  f_MIC  = f_OUT / `CG.DCNT,              // I2S clock to mic array (MIC_SCK and m_rise/fall)
+  f_PI   = f_MIC * M;                     // I2S clock to Pi (PI_SCK and p_rise/fall)
+
+// Audio sample rate (ASR) in Hz
+const real ASR = f_MIC / `CG.PCM * 1e6, ASR_nom = 48000;
+
+task ClockConfig;
+  $info({ "Clock configuration report:\n",
+    "  M=%0d  DIVR+1=%0d  DIVF+1=%0d  2^DIVQ=%0d  DCNT=%0d  SCNT=%0d \n",
+    "  PLL :: REF: %2.1f MHz  PFD: %2.1f MHz  VCO: %4.1f MHz  OUT: %3.1f MHz\n",
+    "  CORECLK: %2.4f MHz  MIC_SCK: %1.4fMHz  PI_SCK: %2.4f MHz\n",
+    "  ASR: %0.0f Hz = %0.0f Hz %0s%0.2f%%" },
+    `CG.M, `CG.DIVR+1, `CG.DIVF+1, 2**`CG.DIVQ, `CG.DCNT, `CG.SCNT,
+    f_REF, f_PFD, f_VCO, f_OUT, f_CORE, f_MIC, f_PI,
+    ASR, ASR_nom, ASR >= ASR_nom ? "+" : "", (ASR-ASR_nom)*100.0/ASR_nom);
+endtask
+
+initial begin
+  // Parameter consistency throughout hierarchy
+  assert (M   == `CG.M)   else ++monerr;
+  assert (PCM == `CG.PCM) else ++monerr;
+
+  // Check that PLL clock frequencies are within valid ranges
+  assert (f_PFD >=  10 && f_PFD <=  133) else ++monerr;  // PFD inputs
+  assert (f_VCO >= 533 && f_VCO <= 1066) else ++monerr;  // VCO output
+  assert (f_OUT >=  16 && f_OUT <=  275) else ++monerr;  // Macro output
+
+  // Core clock divisor must carry sufficient resolution to generate PI_SCK
+  assert (`CG.DCNT >= `CG.M * 2 * 2) else ++monerr;
+
+  // Check for edge conflicts (simultaneous rise and fall)
+  assert ((`CG. CLK_RISE & `CG. CLK_FALL) == '0) else ++monerr;
+  assert ((`CG.MSCK_RISE & `CG.MSCK_FALL) == '0) else ++monerr;
+  assert ((`CG.PSCK_RISE & `CG.PSCK_FALL) == '0) else ++monerr;
+
+  // Check for proper clock ratios by couting edges
+  assert ($countones(`CG. CLK_RISE) == `CG.M * 2) else ++monerr;
+  assert ($countones(`CG. CLK_FALL) == `CG.M * 2) else ++monerr;
+  assert ($countones(`CG.MSCK_RISE) == 1)         else ++monerr;
+  assert ($countones(`CG.MSCK_FALL) == 1)         else ++monerr;
+  assert ($countones(`CG.PSCK_RISE) == `CG.M)     else ++monerr;
+  assert ($countones(`CG.PSCK_FALL) == `CG.M)     else ++monerr;
 end
 
 // ------------------------------------------------------------------

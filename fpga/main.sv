@@ -13,9 +13,10 @@ module main #(
                     `endif
   ) (
 
-  // Clocks
-  input  logic         REFCLK,    // 12MHz reference clock
+  // Clock and Reset
+  input  logic         REFCLK,    // 12MHz reference clock input
   output logic         CORECLK,   // Core clock test output & constraint hack
+  output logic         CORERST,   // Core reset test output
 
   // Upstream interface with MEMS microphones
   // Note: FPGA is I2S clock producer and data receiver
@@ -77,7 +78,8 @@ tdm     #(.M(M)) tdm     (.*);  // TDM Aggregator
 tstgen  #(.M(M)) tstgen  (.*);  // Test Pattern Generator
 i2c              i2c     (.*);  // Mini I2C Client
 
-assign CORECLK = clk;  // Constraint hack and test point
+assign CORECLK = clk;  // Test point and constraint workaround
+assign CORERST = rst;  // Test point
 
 // Control Register value on first row of LED Matrix
 assign LED_R = ~(4'b0001);
