@@ -140,8 +140,8 @@ initial begin
     ptype = 0;  // Disabled
     WriteControlRegister(8'h10 | i);  // ilb=0 tpat=1 msel=i (tdm=0)
     ptype = 3;  // Mux with tagged frames
-    wait (pi.pstate == pi.RUN);
-    pi.id = i;
+    wait (pi.r_pstate == pi.RUN);
+    pi.r_id = i;
 
     #200us;
     TestSummary;
@@ -177,11 +177,11 @@ end
 
 // Summary at the end of each test with configuration and error counts
 task TestSummary;
-  assert (pi.pstate === pi.RUN)
+  assert (pi.r_pstate === pi.RUN)
     else $error("monerr=%0d : Checker did not reach RUN state!", ++monerr);
   $display("msel=%0d tpat=%0d ilb=%0b tcnt=%0d monerr=%0d chkerr=%0d",
            dut.ioports.msel, dut.tstgen.tpat, dut.ioports.ilb,
-           dut.tstgen.tcnt, monerr, pi.chkerr);
+           dut.tstgen.tcnt, monerr, pi.r_chkerr);
 endtask
 
 // Final summary at end of simulation with error counts
@@ -189,10 +189,10 @@ final begin
   bit result;
   string summary;
 
-  result = (monerr == 0 && pi.chkerr === 0);
+  result = (monerr == 0 && pi.r_chkerr === 0);
   $sformat(summary, "Simulation %0s with %0d monitor error%0s and %0d checker error%0s",
-           result ? "finished" : "FAILED", monerr,    monerr == 1 ? "" : "s",
-                                        pi.chkerr, pi.chkerr == 1 ? "" : "s");
+           result ? "finished" : "FAILED", monerr,      monerr == 1 ? "" : "s",
+                                      pi.r_chkerr, pi.r_chkerr == 1 ? "" : "s");
   assert (result) $info (summary);
     else          $error(summary);
 end
@@ -218,8 +218,8 @@ for (genvar i = 1; i <= M; i++) begin : sigmon
     @(negedge dut.tstgen.sck);
     tsdo = tsdo_new;        // 2 frame delay
     tsdo_new = tsdo_newer;  // 1 frame delay
-    tsdo_newer[63:32] = dut.tstgen.pair[i].chan[0].tsdo;  // Left channel
-    tsdo_newer[31: 0] = dut.tstgen.pair[i].chan[1].tsdo;  // Right channel
+    tsdo_newer[63:32] = dut.tstgen.pair[i].chan[0].r_tsdo;  // Left channel
+    tsdo_newer[31: 0] = dut.tstgen.pair[i].chan[1].r_tsdo;  // Right channel
     if (ptype == 3)
       tsdo = tsdo_new;  // Reduced pipeline latency in Mux mode
   end
@@ -253,16 +253,16 @@ for (genvar i = 1; i <= M; i++) begin : sigmon
   // Pi checker
   always begin
     @(posedge dut.tdm.r_sof);  // Input shift complete
-    @(negedge pi.eof);       // Received end of frame
+    @(negedge pi.eof);         // Received end of frame
     @(negedge pi.SCK);
-    psdi = pi.psdi[64*(M-i) +:64];
+    psdi = pi.r_psdi[64*(M-i) +:64];
   end
 
   // Compare latched data throughout pipeline in middle of each frame
   // Note: Extra conditions help ignore transients at startup and when changing modes
   always begin
     @(posedge MIC_WS);
-    if (ptype != 3 && pi.pstate == pi.RUN && pi.pstate_old == pi.RUN)
+    if (ptype != 3 && pi.r_pstate == pi.RUN && pi.pstate_old == pi.RUN)
       assert (dut.tstgen.tcnt < 2 || sdi === tsdo && sdo === sdi && psdi === sdo)
         else $error("monerr=%0d i=%0d tsdo=%16h sdi=%16h sdo=%16h psdi=%16h",
                    ++monerr,    i,    tsdo,     sdi,     sdo,     psdi);

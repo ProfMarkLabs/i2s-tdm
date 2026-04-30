@@ -23,7 +23,6 @@ module tstgen #(
 
 wire logic tpat = ctrl[4];  // Test pattern select
 wire logic aln  = p_aln_i;  // Alignment control
-
 wire logic sck = m_sck_li;  // I2S clock
 
 // I2S word select (WS) and end of frame (EOF) detection
@@ -50,20 +49,20 @@ for (genvar i = 1; i <= M; i++) begin : pair
     // TODO: Use bitwise implementation to reduce logic utilization
 
     // Output shifter and LFSR
-    var logic [31:0] next_tsdo,  tsdo;
-    var logic [30:0] next_tlfsr, tlfsr;
+    var logic [31:0] n_tsdo,  r_tsdo;
+    var logic [30:0] n_tlfsr, r_tlfsr;
 
     always_comb begin
       // Defaults
-      next_tsdo  = tsdo;
-      next_tlfsr = tlfsr;
+      n_tsdo  = r_tsdo;
+      n_tlfsr = r_tlfsr;
 
       if (eof) begin
         if (init) begin
           // Reinitialize registers for frame re-alignment
           // Invalidate data for simulation
-          next_tsdo  = 'x;
-          next_tlfsr = 31'(i << 0 | j << 12 | i << 16);
+          n_tsdo  = 'x;
+          n_tlfsr = 31'(i << 0 | j << 12 | i << 16);
         end
 
         else
@@ -71,32 +70,32 @@ for (genvar i = 1; i <= M; i++) begin : pair
           case (tpat)
             0: // PRBS-31
               for (int k = 31; k >= 0; k--) begin
-                next_tsdo[k] = next_tlfsr[30];
-                next_tlfsr = {next_tlfsr[29:0], next_tlfsr[30] ^ next_tlfsr[27]};
+                n_tsdo[k] = n_tlfsr[30];
+                n_tlfsr = {n_tlfsr[29:0], n_tlfsr[30] ^ n_tlfsr[27]};
               end
 
             1: // Tagged Frames
-              next_tsdo = {8'(i), j ? 8'hBB : 8'hAA, 16'(tcnt)};
+              n_tsdo = {8'(i), j ? 8'hBB : 8'hAA, 16'(tcnt)};
 
           endcase
       end
       else if (j == wsq)
         // Output shifter with intentional invalidation to catch alignment bugs
-        next_tsdo = {tsdo[30:0], 1'bx};
+        n_tsdo = {r_tsdo[30:0], 1'bx};
     end
 
     // Register updates
     // Note: No reset, relies on initial values above
     always_ff @(posedge sck) begin
-      tsdo  <= next_tsdo;
-      tlfsr <= next_tlfsr;
+      r_tsdo  <= n_tsdo;
+      r_tlfsr <= n_tlfsr;
     end
 
   end : chan
 
   // Data output, MSB-first
-  assign m_sd_lo[i] = ws ? chan[1].next_tsdo[31]   // Right channel
-                         : chan[0].next_tsdo[31];  // Left channel
+  assign m_sd_lo[i] = ws ? chan[1].n_tsdo[31]   // Right channel
+                         : chan[0].n_tsdo[31];  // Left channel
 
 end : pair
 endgenerate
