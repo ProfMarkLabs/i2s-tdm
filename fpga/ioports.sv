@@ -173,12 +173,12 @@ always_ff @(posedge clk)
 
 // PI_ALN
 // Input synchronizer and source combiner with CR bit
-// Update in middle of frame (MIC_WS 1->0) to ensure timing
+// Update in middle of frame (MIC_WS 0->1) to ensure timing
 // IMPORTANT: Must be asserted for at least one frame time (48kHz sample)
 var  logic [1:0] aln_sync = '0;
 always_ff @(posedge clk) begin
   aln_sync <= {PI_ALN, aln_sync[1]};
-  if (m_ws_q && !m_ws_o)
+  if (!m_ws_q && m_ws_o)
     p_aln_i <= aln_sync[0] || aln;
 end
 
