@@ -1,26 +1,30 @@
-// FPGA testbench
-
+// I2S TDM Aggregator
+// Top-level simulation testbench
+// ------------------------------------------------------------------
 // SPDX-DocumentNamespace: https://github.com/ProfMarkLabs/i2s-tdm
 // SPDX-FileCopyrightText: (C) 2026 Mark Warriner
 // SPDX-License-Identifier: 0BSD
+// ------------------------------------------------------------------
 
 `timescale 1ns / 1ps
 
 module testbench;
 
-var int ptype  = 0;  // Pi test type: 0:Disable 1:TDM-PRBS 2:TDM-TF 3:Mux-TF
-var int monerr = 0;  // Monitor error count
-//      pi.chkerr    // Checker error count (FYI)
+var  int ptype  = 0;  // Test type: 0:Disable 1:TDM-PRBS 2:TDM-TF 3:Mux-TF
+var  int cfgerr = 0;  // Configuration error count
+var  int monerr = 0;  // Monitor error count
+wire int chkerr;      // Checker error count
+
+localparam int MAXERR = 10;  // Maximum number of errors to report in detail
 
 // ------------------------------------------------------------------
 // Device under test (DUT)
 // ------------------------------------------------------------------
 
-// Number of mic pairs and PCM frame size
-localparam int M = `ifdef TDM8    4
+localparam int M = `ifdef TDM8    4    // Number of microphone pairs
                    `elsif TDM24  12
                    `endif ;
-localparam int PCM = 2*32;
+localparam int PCM = 2*32;             // Stereo PCM frame size in bits
 
 // Reference clock
 var  logic REFCLK;
@@ -51,7 +55,11 @@ wire logic [3:0] LED_R;
 wire logic [7:0] LED_C;
 
 // DUT instantiation
-main #(.M(M)) dut (.*);
+main #(.M(M), .PCM(PCM)) dut (.*);
+
+// Reference clock, 12MHz
+initial REFCLK = 0;
+always #42 REFCLK = !REFCLK;
 
 // External loopback
 assign MLB_SCK = MIC_SCK;
@@ -59,41 +67,34 @@ assign MLB_WS  = MIC_WS;
 assign MIC_SD  = MLB_SD;
 
 // ------------------------------------------------------------------
-// Clocking
+// Test pattern checker
 // ------------------------------------------------------------------
 
-// Reference clock, 12MHz
-initial REFCLK = 0;
-always #42 REFCLK = !REFCLK;
+// Checks DUT output, acting as a simulation model for the Raspberry Pi 5
 
-// Hack for incomplete PLL simulation model
+/*tstchk_pi*/pi_emu #(.M(M), .PCM(PCM)) pi (
+  // TB interface
+  .ptype,     // input  : Test type selection
+  .chkerr,    // output : Cumulative error count
 
-logic pll_out = 0;
-always #3.876 pll_out = !pll_out;
-assign dut.clkgen.pll.PLLOUTGLOBAL = pll_out;
+  // DUT interface: I2S clock consumer and data receiver
+  .PI_SCK,    // input  : I2S clock from DUT
+  .PI_WS,     // input  : I2S word select from DUT
+  .PI_SD      // input  : I2S data from DUT
+  );
 
-logic pll_lock = 0;
-initial #1us pll_lock = 1;
-assign dut.clkgen.pll.LOCK = pll_lock;
-
-// ------------------------------------------------------------------
-// Pattern checker
-// ------------------------------------------------------------------
-
-// Raspberry Pi 5 model
-// I2S clock consumer, data input
-pi_emu #(.M(M)) pi (.ptype, .SCK(PI_SCK), .WS(PI_WS), .SD(PI_SD));
-
-// Note: Pattern generator is internal to DUT and is used with an
-// external or internal loopback in this simulation testbench.
+// Note: Test pattern generator is internal to DUT and is used with
+// external and internal loopbacks in this simulation testbench.
 
 // ------------------------------------------------------------------
 // Test sequence
 // ------------------------------------------------------------------
 
 initial begin
+
   $dumpvars(0, testbench);
 
+  ///////////////////////////////////////////////////////////////////////////
   $display;
   ClockConfig;
   #0;
@@ -111,7 +112,8 @@ initial begin
   ptype = 0;  // Disabled
   PI_ALN = 1;
   WriteControlRegister(8'h00);  // ilb=0 tpat=0 msel=0 (tdm=1)
-  wait (dut.tdm.r_state == dut.tdm.STOP);  // or > 20.8us delay
+  #20.8us;
+  assert(dut.tdm.r_state == dut.tdm.STOP) else monerr++;
   ptype = 1;  // TDM with PRBS-31
   PI_ALN = 0;
 
@@ -128,7 +130,8 @@ initial begin
 
   ptype = 0;  // Disabled
   WriteControlRegister(8'h90);  // aln=1 ilb=0 tpat=1 msel=0 (tdm=1)
-  wait (dut.tdm.r_state == dut.tdm.STOP);  // or > 20.8us delay
+  #20.8us;
+  assert(dut.tdm.r_state == dut.tdm.STOP) else monerr++;
   ptype = 2;  // TDM with tagged frames
   WriteControlRegister(8'h10);  // aln=0
 
@@ -168,7 +171,8 @@ initial begin
   ptype = 0;  // Disabled
   PI_ALN = 1;
   WriteControlRegister(8'h50);  // ilb=1 tpat=1 msel=0 (tdm=1)
-  wait (dut.tdm.r_state == dut.tdm.STOP);  // or > 20.8us delay
+  #20.8us;
+  assert(dut.tdm.r_state == dut.tdm.STOP) else monerr++;
   ptype = 2;  // TDM with tagged frames
   PI_ALN = 0;
 
@@ -179,6 +183,7 @@ initial begin
 
   ///////////////////////////////////////////////////////////////////////////
 
+  $display;
   $finish;
 end
 
@@ -186,33 +191,50 @@ end
 // Summary reports
 // ------------------------------------------------------------------
 
-// Summary at the end of each test with configuration and error counts
+// Summary at the end of each test
 task TestSummary;
-  assert (pi.r_pstate === pi.RUN || $time == 0)
-    else $error("monerr=%0d : Checker did not reach RUN state!", ++monerr);
-  $display("msel=%0d tpat=%0d ilb=%0b tcnt=%0d monerr=%0d chkerr=%0d",
-           dut.ioports.msel, dut.tstgen.tpat, dut.ioports.ilb,
-           dut.tstgen.tcnt, monerr, pi.r_chkerr);
+  if ($time > 0) begin
+    // Sanity checks to ensure we actually tested something
+    assert (pi.r_pstate === pi.RUN)
+      else $error("monerr=%0d : Checker did not reach RUN state!", ++monerr);
+    assert (dut.tstgen.r_tnum > 4)
+      else $error("monerr=%0d : Not enough frames generated", ++monerr);
+
+    $display("msel=%0d tpat=%0d ilb=%0b tnum=%0d monerr=%0d chkerr=%0d",
+            dut.ioports.msel, dut.tstgen.tpat, dut.ioports.ilb,
+            dut.tstgen.r_tnum, monerr, chkerr);
+  end
 endtask
 
-// Final summary at end of simulation with error counts
-final begin
-  bit result;
-  string summary;
+// Final summary at end of simulation
+final begin : FinalSummary
+  bit result;      // Overall simulation result: 1:pass 0:fail
+  string summary;  // Common report string
 
-  result = (monerr == 0 && pi.r_chkerr === 0);
-  $sformat(summary, "Simulation %0s with %0d monitor error%0s and %0d checker error%0s",
-           result ? "finished" : "FAILED", monerr,      monerr == 1 ? "" : "s",
-                                      pi.r_chkerr, pi.r_chkerr == 1 ? "" : "s");
+  result = (cfgerr == 0 && monerr == 0 && chkerr === 0);
+  $sformat(summary, "Simulation %0s with %0d config error%0s, %0d monitor error%0s, and %0d checker error%0s",
+           result ? "finished" : "FAILED", cfgerr, cfgerr == 1 ? "" : "s",
+                                           monerr, monerr == 1 ? "" : "s",
+                                           chkerr, chkerr == 1 ? "" : "s");
   assert (result) $info (summary);
     else          $error(summary);
-end
+end : FinalSummary
 
 // ------------------------------------------------------------------
-// Clock Generator configuration checks
+// Clock Generator
 // ------------------------------------------------------------------
 
 `define CG dut.clkgen
+
+// Workaround for incomplete PLL simulation model
+
+logic pll_out = 0;
+always #3.876 pll_out = !pll_out;
+assign `CG.pll.PLLOUTGLOBAL = pll_out;
+
+logic pll_lock = 0;
+initial #1us pll_lock = 1;
+assign `CG.pll.LOCK = pll_lock;
 
 // Clock frequencies in MHz
 const real
@@ -229,65 +251,78 @@ const real ASR = f_MIC / `CG.PCM * 1e6, ASR_nom = 48000;
 
 task ClockConfig;
   $info({ "Clock configuration report:\n",
-    "  M=%0d  DIVR+1=%0d  DIVF+1=%0d  2^DIVQ=%0d  DCNT=%0d  SCNT=%0d \n",
-    "  PLL :: REF: %2.1f MHz  PFD: %2.1f MHz  VCO: %4.1f MHz  OUT: %3.1f MHz\n",
-    "  CORECLK: %2.4f MHz  MIC_SCK: %1.4fMHz  PI_SCK: %2.4f MHz\n",
+    "  [PLL] DIVR+1=%0d DIVF+1=%0d 2^DIVQ=%0d REF:%2.1fMHz PFD:%2.1fMHz VCO:%4.1fMHz OUT:%3.1fMHz\n",
+    "  [dig] M=%0d DCNT=%0d SCNT=%0d CORECLK:%2.4fMHz MIC_SCK:%1.4fMHz PI_SCK:%2.4fMHz\n",
     "  ASR: %0.0f Hz = %0.0f Hz %0s%0.2f%%" },
-    `CG.M, `CG.DIVR+1, `CG.DIVF+1, 2**`CG.DIVQ, `CG.DCNT, `CG.SCNT,
-    f_REF, f_PFD, f_VCO, f_OUT, f_CORE, f_MIC, f_PI,
+    `CG.DIVR+1, `CG.DIVF+1, 2**`CG.DIVQ, f_REF, f_PFD, f_VCO, f_OUT,
+    `CG.M, `CG.DCNT, `CG.SCNT, f_CORE, f_MIC, f_PI,
     ASR, ASR_nom, ASR >= ASR_nom ? "+" : "", (ASR-ASR_nom)*100.0/ASR_nom);
 endtask
 
-initial begin
-  // Parameter consistency throughout hierarchy
-  assert (M   == `CG.M)   else ++monerr;
-  assert (PCM == `CG.PCM) else ++monerr;
+// Check the Clock Generator configuration to ensure its validity
+initial begin : ClockConfigCheck
+
+  // Parameter consistency throughout hierarchy (just in case)
+  assert (M == `CG.M && PCM == `CG.PCM)
+    else $error("cfgerr=%0d : Inconsistent parameters", ++cfgerr);
 
   // Check that PLL clock frequencies are within valid ranges
-  assert (f_PFD >=  10 && f_PFD <=  133) else ++monerr;  // PFD inputs
-  assert (f_VCO >= 533 && f_VCO <= 1066) else ++monerr;  // VCO output
-  assert (f_OUT >=  16 && f_OUT <=  275) else ++monerr;  // Macro output
+  assert (f_PFD >=  10 && f_PFD <=  133)
+    else $error("cfgerr=%0d : PLL PFD frequency out of range", ++cfgerr);
+  assert (f_VCO >= 533 && f_VCO <= 1066)
+    else $error("cfgerr=%0d : PLL VCO frequency out of range", ++cfgerr);
+  assert (f_OUT >=  16 && f_OUT <=  275)
+    else $error("cfgerr=%0d : PLL OUT frequency out of range", ++cfgerr);
 
-  // Core clock divisor must carry sufficient resolution to generate PI_SCK
-  assert (`CG.DCNT >= `CG.M * 2 * 2) else ++monerr;
+  // Core clock divider counter must carry sufficient resolution to generate
+  // both edges of the Core Clock that in turn can create the clock enable
+  // pulses for both edges of PI_SCK (clock output as data).
+  assert (`CG.DCNT >= `CG.M * 2 * 2)
+     else $error("cfgerr=%0d : DCNT value too low", ++cfgerr);
 
-  // Check for edge conflicts (simultaneous rise and fall)
-  assert ((`CG. CLK_RISE & `CG. CLK_FALL) == '0) else ++monerr;
-  assert ((`CG.MSCK_RISE & `CG.MSCK_FALL) == '0) else ++monerr;
-  assert ((`CG.PSCK_RISE & `CG.PSCK_FALL) == '0) else ++monerr;
+  // Check for edge conflicts (simultaneous rise and fall not allowed) and
+  // confirm proper clock ratios (1 MIC_SCK : 2M CORECLK (clk) : M PI_SCK)
+  // by couting edges in pattern generators
+  assert ( (`CG. CLK_RISE & `CG. CLK_FALL) == '0
+        && $countones(`CG. CLK_RISE) == `CG.M * 2
+        && $countones(`CG. CLK_FALL) == `CG.M * 2 )
+    else $error("cfgerr=%0d : CORECLK (clk) has improper edge pattern", ++cfgerr);
+  assert ( (`CG.MSCK_RISE & `CG.MSCK_FALL) == '0
+        && $countones(`CG.MSCK_RISE) == 1
+        && $countones(`CG.MSCK_FALL) == 1 )
+    else $error("cfgerr=%0d : MIC_SCK has improper edge pattern", ++cfgerr);
+  assert ( (`CG.PSCK_RISE & `CG.PSCK_FALL) == '0
+        && $countones(`CG.PSCK_RISE) == `CG.M
+        && $countones(`CG.PSCK_FALL) == `CG.M)
+    else $error("cfgerr=%0d : PI_SCK has improper edge pattern", ++cfgerr);
 
-  // Check for proper clock ratios by couting edges
-  assert ($countones(`CG. CLK_RISE) == `CG.M * 2) else ++monerr;
-  assert ($countones(`CG. CLK_FALL) == `CG.M * 2) else ++monerr;
-  assert ($countones(`CG.MSCK_RISE) == 1)         else ++monerr;
-  assert ($countones(`CG.MSCK_FALL) == 1)         else ++monerr;
-  assert ($countones(`CG.PSCK_RISE) == `CG.M)     else ++monerr;
-  assert ($countones(`CG.PSCK_FALL) == `CG.M)     else ++monerr;
-end
+  assert (cfgerr == 0) $info (   "Configuration OK"     );
+                  else $fatal(0, "Invalid configuration");
+
+end : ClockConfigCheck
 
 // ------------------------------------------------------------------
 // Datapath monitors
 // ------------------------------------------------------------------
 
 // Here we monitor the pipeline and confirm that the data matches where
-// expected. This is in addition to the checks done in the Pi model.
+// expected. This is in addition to the verification done in tstchk_sim.
 
 // IMPORTANT: We insert frame delays so that the signals line up in the
 // simulation waveform for easy comparison.
 
 generate
-for (genvar i = 1; i <= M; i++) begin : sigmon
+for (genvar i = 1; i <= M; i++) begin : Monitor
 
-  logic [63:0] tsdo, tsdo_new, tsdo_newer, sdi, sdi_new, sdo, sdo_new, psdi;
+  logic [63:0] tsdo_cap, tsdo, tsdo_new, sdi, sdi_new, sdo, sdo_new, psdi;
 
   // Test pattern generator
+  always @(posedge dut.tstgen.m_sck_li)
+    tsdo_cap <= {tsdo_cap[62:0], dut.tstgen.m_sd_lo[i]};
   always begin
-    @(negedge dut.tstgen.eof);  // Output shifter reload
-    @(negedge dut.tstgen.sck);
-    tsdo = tsdo_new;        // 2 frame delay
-    tsdo_new = tsdo_newer;  // 1 frame delay
-    tsdo_newer[63:32] = dut.tstgen.pair[i].chan[0].r_tsdo;  // Left channel
-    tsdo_newer[31: 0] = dut.tstgen.pair[i].chan[1].r_tsdo;  // Right channel
+    @(posedge dut.tstgen.eof);
+    tsdo = tsdo_new;    // 1 frame delay
+    tsdo_new = tsdo_cap;
     if (ptype == 3)
       tsdo = tsdo_new;  // Reduced pipeline latency in Mux mode
   end
@@ -296,7 +331,7 @@ for (genvar i = 1; i <= M; i++) begin : sigmon
   always begin
     @(posedge dut.tdm.r_sof);  // Input shift complete
     @(negedge dut.clk);
-    sdi = sdi_new;  // 1 frame delay
+    sdi = sdi_new;     // 1 frame delay
     sdi_new = dut.tdm.sdi[64*(M-i) +:64];
     if (ptype == 3)
       sdi  = sdi_new;  // Reduced pipeline latency in Mux mode
@@ -306,13 +341,13 @@ for (genvar i = 1; i <= M; i++) begin : sigmon
   always begin
     @(negedge dut.tdm.r_sof);  // Parallel load complete
     @(negedge dut.clk);
-    sdo = sdo_new;  // 1 frame delay
+    sdo = sdo_new;    // 1 frame delay
     sdo_new = dut.tdm.sdo[64*(M-i) +:64];
     if (ptype == 3)
       sdo = sdi_new;  // Reduced pipeline latency in Mux mode
 
     // Check output framing of TDM aggregator
-    if (dut.tstgen.tcnt > 1)
+    if (dut.tstgen.r_tnum > 1)
       assert (dut.tdm.r_pcnt === '0 && PI_WS === 0)
         else $error("monerr=%0d i=%0d pcnt=%0d (exp %0d) PI_WS=%0b (exp %0b)",
                    ++monerr,    i,    dut.tdm.r_pcnt, 0, PI_WS, 0);
@@ -322,21 +357,24 @@ for (genvar i = 1; i <= M; i++) begin : sigmon
   always begin
     @(posedge dut.tdm.r_sof);  // Input shift complete
     @(negedge pi.eof);         // Received end of frame
-    @(negedge pi.SCK);
-    psdi = pi.r_psdi[64*(M-i) +:64];
+    @(negedge PI_SCK);
+    psdi = pi.r_psdi[64*(M-i) +:64];  // No delay needed
   end
 
   // Compare latched data throughout pipeline in middle of each frame
   // Note: Extra conditions help ignore transients at startup and when changing modes
-  always begin
+  always begin : Compare
     @(posedge MIC_WS);
-    if (ptype != 3 && pi.r_pstate == pi.RUN && pi.pstate_old == pi.RUN)
-      assert (dut.tstgen.tcnt < 2 || sdi === tsdo && sdo === sdi && psdi === sdo)
-        else $error("monerr=%0d i=%0d tsdo=%16h sdi=%16h sdo=%16h psdi=%16h",
-                   ++monerr,    i,    tsdo,     sdi,     sdo,     psdi);
-  end
+    if (ptype != 3 && pi.r_pstate == pi.RUN && !(tsdo === 'x && sdi == 'x && sdo == '1 && psdi == '1))
+      assert (sdi === tsdo && sdo === sdi && psdi === sdo)
+        else if (++monerr <= MAXERR)
+          $error("monerr=%0d i=%0d tsdo=%16h sdi=%16h sdo=%16h psdi=%16h",
+                  monerr,    i,    tsdo,     sdi,     sdo,     psdi);
+        else if (monerr == MAXERR + 1)
+          $error("Additional error messages suppressed");
+  end : Compare
 
-end : sigmon
+end : Monitor
 endgenerate
 
 // ------------------------------------------------------------------
