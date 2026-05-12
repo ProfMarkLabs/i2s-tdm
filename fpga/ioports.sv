@@ -1,9 +1,19 @@
-// Logic for Input/Output Ports
-// Output registers, input synchronization, test mode muxes, tristate logic
-
+// I2S TDM Aggregator
+// Input/Output Ports
+// ------------------------------------------------------------------
 // SPDX-DocumentNamespace: https://github.com/ProfMarkLabs/i2s-tdm
 // SPDX-FileCopyrightText: (C) 2026 Mark Warriner
 // SPDX-License-Identifier: 0BSD
+// ------------------------------------------------------------------
+// DESCRIPTION
+// This module implements the external interface logic so that the
+// modules in the core design remain clean.
+//
+// FEATURES
+//   * Input synchronization and filtering
+//   * Output registers and tri-state logic
+//   * Various test mode muxes
+// ------------------------------------------------------------------
 
 module ioports #(
 
@@ -64,7 +74,7 @@ module ioports #(
 );
 
 // ------------------------------------------------------------------
-// Control Register (CR) decoder
+// Control Register decoder
 // ------------------------------------------------------------------
 
 // Mode/Mic Select
@@ -172,7 +182,7 @@ always_ff @(posedge clk)
 // ------------------------------------------------------------------
 
 // PI_ALN
-// Input synchronizer and source combiner with CR bit
+// Input synchronizer and source combiner with Control Register bit
 // Update in middle of frame (MIC_WS 0->1) to ensure timing
 // IMPORTANT: Must be asserted for at least one frame time (48kHz sample)
 var  logic [1:0] aln_sync = '0;

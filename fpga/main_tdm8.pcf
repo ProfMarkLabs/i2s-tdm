@@ -1,9 +1,10 @@
-# FPGA Pin Constraint File (PCF)
-# TDM Aggregator with 8 mics
-
+# I2S TDM Aggregator
+# FPGA Pin Constraint File (PCF) for 8-mic design
+# ------------------------------------------------------------------
 # SPDX-DocumentNamespace: https://github.com/ProfMarkLabs/i2s-tdm
 # SPDX-FileCopyrightText: (C) 2026 Mark Warriner
 # SPDX-License-Identifier: 0BSD
+# ------------------------------------------------------------------
 
 # Clocks
 set_io REFCLK      P7  # input  - 12MHz reference clock

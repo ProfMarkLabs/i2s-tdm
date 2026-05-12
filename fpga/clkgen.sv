@@ -1,3 +1,4 @@
+// I2S TDM Aggregator
 // Clock Generator
 // ------------------------------------------------------------------
 // SPDX-DocumentNamespace: https://github.com/ProfMarkLabs/i2s-tdm
@@ -6,10 +7,11 @@
 // ------------------------------------------------------------------
 // DESCRIPTION
 //
-// A hybrid frequency synthesizer using a PLL macro and two digital counters
-// to create three synchronous clocks with fixed frequency ratio. The clock
-// rates closely approximate the desired audio sample rate (ASR) for the
-// number of mic-pair lanes (M) and pulse-coded modulation (PCM) frame size.
+// This module implements a hybrid frequency synthesizer using a PLL macro
+// and two digital counters to create three synchronous clocks with a fixed
+// frequency ratio. The clock rates closely approximate the desired audio
+// sample rate (ASR) for the number of mic-pair lanes (M) and pulse-coded
+// modulation (PCM) frame size.
 //
 //     Primary pin      MIC_SCK      CORECLK      PI_SCK
 //     Global nets      m_rise         clk        p_rise
@@ -19,18 +21,25 @@
 //     Freq example    ~3.072MHz   ~24.576MHz   ~12.288MHz
 //                     M=4, PCM=2*32, ASR=48kHz
 //
+//   . . . . . . . . . . PLL Macro . . . . . . . pll_lock-->[sync]--> CORERST
+//   .              ___    _____                     .         ^       (rst)
+// ---->[DIVR+1]-->|PFD|->|CP+LF|->(VCO)-+->[2^DIVQ]-->{DCNT}--+----> CORECLK
+// REFCLK      ,-->|___|  |_____|        |         pll_clk     |       (clk)
+//   .         |                         |           .         v
+//   .         `-------[DIVF+1]<---------'           .      {SCNT}--> MIC_SCK
+//   . . . . . . . . . . . . . . . . . . . . . . . . .          \---> PI_SCK
+//
 // Advantages of this architecture:
 //   1. High frequency accuracy without a Frac-N PLL.
-//   2. Clock to mics is stable, ensuring clean ADC operation.
-//   3. Low skew outputs owing to the use of clock enable pulses.
-//   4. Easier timing closure with a just-fast-enough core clock.
+//   2. Mic clock is an integer divison of PLL, ensuring clean ADC operation.
+//   3. Low skew outputs, owing to use of clock enable pulses (clock as data).
+//   4. Easier timing closure with medium-rate core clock vs PLL clock.
 // ------------------------------------------------------------------
 
 module clkgen #(
   parameter int M,            // Number of mic pairs
   parameter int PCM = 2 * 32  // Stereo PCM frame size in bits
-  ) (
-
+) (
   input  logic REFCLK,        // Reference clock (primary input)
 
   output logic clk,           // FPGA core clock
@@ -40,7 +49,6 @@ module clkgen #(
   output logic m_fall,
   output logic p_rise,        // Clock enable pulses to Pi (downsteam I2S)
   output logic p_fall
-
 );
 
 // ------------------------------------------------------------------

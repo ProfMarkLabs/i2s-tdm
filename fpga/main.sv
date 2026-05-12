@@ -1,9 +1,42 @@
 // I2S TDM aggregator
-// FPGA top level
+// Design top level
 // ------------------------------------------------------------------
 // SPDX-DocumentNamespace: https://github.com/ProfMarkLabs/i2s-tdm
 // SPDX-FileCopyrightText: (C) 2026 Mark Warriner
 // SPDX-License-Identifier: 0BSD
+// ------------------------------------------------------------------
+// FEATURES
+//
+//  * Aggregates multiple I2S stereo PCM intefaces into a single TDM stream
+//  * Architecture: store-and-forward, gapless (no speed-up)
+//  * Offline in-band frame alignment, triggered by an external signal
+//  * Fully synchronous design:
+//      - I2S clock producer for both interfaces
+//      - Common core clock, running at 2x the faster interface
+//      - Clock enable pulses (clock-as-data to minimize output skew)
+//  * All outputs combinational (registered in ioports module)
+//
+//   Clock rate ratio:         MIC_SCK (1) :  clk (2M) : PI_CLK (M)
+//   e.g. M=4 PCM=2*32 @ 48kHz    3.072MHz : 24.576MHz : 12.288MHz
+//
+// EXAMPLE APPLICATION
+//
+//        M lanes x 2-channel PCM                1 lane x 2M-channel TDM
+// +---------+            +---TDM Aggregator FPGA---+           +------+
+// |Mic Array|<-MIC_SCK---|                         |---PI_SCK->| Rasp |
+// |(M pairs)|<-MIC_WS----|   M Input     Output    |---PI_WS-->| Pi 5 |
+// |         |==MIC_SD===>|=> Shifters => Shifter ->|---PI_SD-->| SBC  |
+// +---------+   [1:M]    +-------------------------+           +------+
+//       clock            clock                 clock           clock
+//    consumer    <<      producer           producer     >>    consumer
+//
+// IMPORTANT NOTES
+//
+//   * Highly recommended for both SCKs to have source-series termination
+//     resistors and for MIC_SCK to use a clock distribution buffer.
+//   * WS is not a real clock.  However, both WS and SD may benefit from
+//     series resistors to reduce crosstalk aggression and limit current
+//     when one connected board is unpowered.
 // ------------------------------------------------------------------
 
 module main #(

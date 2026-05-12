@@ -1,34 +1,43 @@
 // I2S TDM Aggregator
+// Core logic
 // ------------------------------------------------------------------
 // SPDX-DocumentNamespace: https://github.com/ProfMarkLabs/i2s-tdm
 // SPDX-FileCopyrightText: (C) 2026 Mark Warriner
 // SPDX-License-Identifier: 0BSD
 // ------------------------------------------------------------------
-// FEATURES
+// DESCRIPTION
 //
-//  * Aggregates multiple stereo PCM interfaces into a single TDM stream
-//  * Architecture: store-and-forward, gapless (no speed-up)
-//  * Offline in-band frame alignment, triggered by an external signal
-//  * Fully synchronous design: common core clock with clock enable pulses
-//  * All outputs combinational (registered in ioports module)
+// This module implements the core logic for the I2S TDM Aggregator.
 //
-//   Clock rate ratio:         MIC_SCK (1) :  clk (2M) : PI_CLK (M)
-//   e.g. M=4 PCM=2*32 @ 48kHz    3.072MHz : 24.576MHz : 12.288MHz
+//  * Accepts stereo pulse-coded modulation (PCM) data from M upsteam
+//    MEMS microphone pairs and aggregates them into a 2M-channel TDM
+//    frame to send downstream to the Raspberry Pi 5.
+//  * Both serial data (SD) signals run continuously at an average
+//    datarate ratio of 1:M (frameless, no speed-up).
+//  * Produces the word select (WS) signals for both interfaces,
+//    based on a pair of bit counters (mcnt, pcnt).
+//  * Transmits an offline in-band frame alignment pattern to allow
+//    the downsteam device to locate the start of the TDM frame.
+//  * Utilizes a start of frame (SOF) condition:
+//      - Triggers the data transfer from Input to Output Shifters
+//      - Snap-aligns the downsteam bit counter (only needed once)
+//      - Advances the frame alignment state machine
 //
-// EXAMPLE APPLICATION
+//    M lanes x                                            1 lane x
+//    2-channels     M x PCM-bit       1 x M*PCM-bit       2M channels
+//    from Mics      Input Shifters    Output Shifter      TDM to Pi
+//   MIC_SD[1] ---> [>>>>>>>]
+//      ...            ...    ======> [>>>>>>>>>>>>>>>] ---> PI_SD
+//   MIC_SD[M] ---> [>>>>>>>]   SOF
 //
-// +-----------+  M x 2ch PCM   +---TDM Aggregator FPGA---+ 1 x TDM  +------+
-// | Mic Array |<----MIC_SCK----|                         |--PI_SCK->| Rasp |
-// | (M pairs) |<----MIC_WS-----|   M Input     Output    |--PI_WS-->| Pi 5 |
-// |           |==MIC_SD[1:M]==>|=> Shifters => Shifter ->|--PI_SD-->| SBC  |
-// +-----------+                +-------------------------+          +------+
-//         clock                clock                 clock          clock
-//      consumer                producer           producer          consumer
+//   MIC_WS <------ {mcnt}     Bit Counters      {pcnt} ---> PI_WS
+//
+// Note: I2S Mux mode selects a single lane, bypassing this module.
 // ------------------------------------------------------------------
 
 module tdm #(
   parameter int M,            // Number of mic pairs
-  parameter int PCM = 2 * 32  // Stereo PCM frame size in bits
+  parameter int PCM           // Stereo PCM frame size in bits
 ) (
   input logic        clk,     // Core clock
   input logic        rst,     // Synchronous reset
