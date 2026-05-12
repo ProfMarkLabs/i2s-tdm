@@ -72,7 +72,7 @@ assign MIC_SD  = MLB_SD;
 
 // Checks DUT output, acting as a simulation model for the Raspberry Pi 5
 
-/*tstchk_pi*/pi_emu #(.M(M), .PCM(PCM)) pi (
+tstchk_pi #(.M(M), .PCM(PCM)) pi (
   // TB interface
   .ptype,     // input  : Test type selection
   .chkerr,    // output : Cumulative error count

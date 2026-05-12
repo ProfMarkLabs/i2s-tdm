@@ -20,7 +20,7 @@
 //    ptype=3      I2S Mux with Tagged Frames
 // ------------------------------------------------------------------
 
-module pi_emu #(
+module tstchk_pi #(
   parameter int M,        // Number of mic pairs
   parameter int PCM       // Stereo PCM frame size in bits
 ) (
